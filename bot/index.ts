@@ -48,18 +48,32 @@ import { STATUS_LABEL } from '../src/lib/status.ts';
 
 // ── 준비 ────────────────────────────────────────────────────────────────────
 
-// 토큰이 없으면 무슨 값이 비었는지 바로 알려주고 종료합니다.
-const BOT_TOKEN = requireEnv('SLACK_BOT_TOKEN', 'xoxb-로 시작하는 Bot User OAuth Token');
-const APP_TOKEN = requireEnv('SLACK_APP_TOKEN', 'xapp-로 시작하는 App-Level Token');
+// 토큰이 없거나 예시값 그대로면, 슬랙에 붙기 전에 여기서 먼저 알려주고 멈춥니다.
+// (그냥 두면 슬랙이 invalid_auth 라는 불친절한 오류만 던져서 원인 찾기가 어렵습니다.)
+const BOT_TOKEN = requireToken('SLACK_BOT_TOKEN', 'xoxb-', 'OAuth & Permissions > Bot User OAuth Token');
+const APP_TOKEN = requireToken('SLACK_APP_TOKEN', 'xapp-', 'Basic Information > App-Level Tokens');
 
-function requireEnv(name: string, hint: string): string {
-  const value = process.env[name];
-  if (!value) {
-    console.error(`\n❌ 환경변수 ${name} 가 없습니다. (${hint})`);
-    console.error(`   .env.local 파일에 ${name}=... 를 추가하세요. 자세한 방법은 SETUP.md 참고.\n`);
+function requireToken(name: string, prefix: string, where: string): string {
+  const value = process.env[name]?.trim();
+
+  const problem = !value
+    ? '값이 없습니다'
+    : // .env.local.example 을 복사만 하고 안 채운 경우 (예: "xoxb-" 만 남아 있음)
+      value === prefix
+      ? '예시값 그대로입니다. 실제 토큰을 붙여넣어 주세요'
+      : !value.startsWith(prefix)
+        ? `${prefix} 로 시작해야 합니다. 두 토큰을 바꿔 넣지 않았는지 확인해 보세요`
+        : null;
+
+  if (problem) {
+    console.error(`\n❌ ${name}: ${problem}`);
+    console.error(`   슬랙에서 받는 곳: ${where}`);
+    console.error(`   받은 값을 .env.local 의 ${name}= 뒤에 붙여넣으세요. (따옴표 없이)`);
+    console.error(`   자세한 방법은 SETUP.md 를 보세요.\n`);
     process.exit(1);
   }
-  return value;
+
+  return value!;
 }
 
 const app = new App({
