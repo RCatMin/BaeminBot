@@ -102,7 +102,7 @@ export function getPot(id: number): Pot | null {
   return (getDb().prepare(`SELECT * FROM pots WHERE id = ?`).get(id) as Pot | undefined) ?? null;
 }
 
-/** 대시보드용: 최근 팟부터 전부 가져옵니다. */
+/** 대시보드용: 최근 팟부터 전부 가져옵니다. (최신순) */
 export function listPots(limit = 50): Pot[] {
   return getDb()
     .prepare(`SELECT * FROM pots ORDER BY id DESC LIMIT ?`)

@@ -5,9 +5,23 @@
  * DB 파일은 프로젝트 안 data/baemin-bot.db 에 만들어지고, .gitignore에 이미 제외돼 있습니다.
  */
 
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
+import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+
+/*
+ * node:sqlite 를 왜 이렇게 가져오나?
+ *
+ * 평범하게 `import { DatabaseSync } from 'node:sqlite'` 라고 쓰면
+ * Next.js 개발 서버가 파일을 고칠 때마다(hot reload) 모듈을 다시 평가하는데,
+ * 그 과정에서 "require is not defined" 오류가 나면서 대시보드가 500이 됩니다.
+ *
+ * process.getBuiltinModule 은 번들러를 거치지 않고 Node 내장 모듈을 바로 꺼내오기
+ * 때문에 이 문제를 피할 수 있습니다. 타입은 위에서 import type 으로 따로 가져옵니다.
+ */
+const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
+
+type DatabaseSync = DatabaseSyncType;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'baemin-bot.db');
@@ -16,8 +30,31 @@ const DB_PATH = path.join(DATA_DIR, 'baemin-bot.db');
 // 한 프로세스 안에서는 연결을 딱 하나만 만들어 재사용합니다.
 let db: DatabaseSync | null = null;
 
+// 열어둔 연결이 "어느 파일"을 보고 있는지 기억해두는 값. 아래 설명 참고.
+let openedFileId: number | null = null;
+
 export function getDb(): DatabaseSync {
-  if (db) return db;
+  /*
+   * 왜 파일을 매번 확인하나?
+   *
+   * 한 번 연 DB 연결은 파일 "이름"이 아니라 파일 "실체"를 붙잡습니다.
+   * 그래서 서버가 떠 있는 동안 data 폴더를 지우고 다시 만들면
+   * (예: 샘플 데이터를 지우려고 rm -rf data 를 했을 때)
+   * 연결은 계속 지워진 옛날 파일을 보게 되고, 새 데이터가 화면에 안 나타납니다.
+   *
+   * inode 는 파일마다 붙는 고유 번호입니다. 이 번호가 달라졌다면
+   * 같은 경로라도 다른 파일이라는 뜻이므로, 연결을 다시 맺습니다.
+   */
+  const fileId = statSync(DB_PATH, { throwIfNoEntry: false })?.ino ?? null;
+
+  if (db && fileId !== null && fileId === openedFileId) return db;
+
+  // 파일이 바뀌었거나 지워졌으면 옛 연결을 정리합니다.
+  if (db) {
+    db.close();
+    db = null;
+    openedFileId = null;
+  }
 
   mkdirSync(DATA_DIR, { recursive: true }); // data 폴더가 없으면 만듭니다.
   db = new DatabaseSync(DB_PATH);
@@ -27,6 +64,7 @@ export function getDb(): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON');
 
   migrate(db);
+  openedFileId = statSync(DB_PATH).ino;
   return db;
 }
 
