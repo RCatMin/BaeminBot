@@ -8,6 +8,8 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 
+import { AutoRefresh } from "./auto-refresh.tsx";
+
 import {
   amountPerPerson,
   formatWon,
@@ -34,6 +36,7 @@ export default function Page() {
           <code className="rounded bg-slate-200 px-1 py-0.5 dark:bg-slate-800">/점심팟</code> 으로
           만든 팟의 모집 · 정산 현황
         </p>
+        <AutoRefresh intervalMs={30_000} />
       </header>
 
       {/*

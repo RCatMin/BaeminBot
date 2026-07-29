@@ -59,7 +59,8 @@ src/lib/status.ts   4단계 정의와 전이 규칙  ← 상태 규칙을 바꾸
 src/lib/pots.ts     팟 생성 · 참여 · 상태 전이 로직 (권한 검사 포함)
 src/lib/blocks.ts   슬랙 메시지 · 모달 생김새 (Block Kit)
 src/lib/db.ts       SQLite 연결과 테이블 정의
-src/app/page.tsx    관리자 대시보드 (보기 전용)
+src/app/page.tsx    관리자 대시보드 (보기 전용, 30초마다 자동 갱신)
+src/app/auto-refresh.tsx  자동 갱신 타이머 (갱신 주기를 바꾸려면 여기)
 scripts/seed.ts     샘플 데이터 넣기
 ```
 
