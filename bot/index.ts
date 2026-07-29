@@ -76,6 +76,31 @@ function requireToken(name: string, prefix: string, where: string): string {
   return value!;
 }
 
+/**
+ * 봇이 받아들일 슬래시 커맨드 이름들.
+ *
+ * ⚠️ 슬랙 매니페스트에 등록한 이름과 **정확히 같아야** 합니다.
+ *    이름을 바꿨는데 여기 없으면, 슬랙은 커맨드를 보내주지만 봇이 무시해서
+ *    "아무 반응이 없는" 상태가 됩니다.
+ *
+ * 코드를 안 고치고 .env.local 에서 바꿀 수도 있습니다.
+ *    SLACK_LUNCH_COMMANDS=/밥먹자,/점심팟
+ */
+const LUNCH_COMMANDS = commandList('SLACK_LUNCH_COMMANDS', ['/점심팟', '/밥먹자', '/lunch']);
+const ACCOUNT_COMMANDS = commandList('SLACK_ACCOUNT_COMMANDS', ['/계좌등록', '/account']);
+
+function commandList(envName: string, fallback: string[]): string[] {
+  const raw = process.env[envName]?.trim();
+  if (!raw) return fallback;
+
+  // "밥먹자, /점심팟" 처럼 적어도 되도록 공백을 지우고 슬래시를 붙여줍니다.
+  return raw
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => (name.startsWith('/') ? name : `/${name}`));
+}
+
 const app = new App({
   token: BOT_TOKEN,
   appToken: APP_TOKEN,
@@ -134,10 +159,10 @@ function accountFromView(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * /점심팟 을 입력하면 팟 만들기 모달을 띄웁니다.
- * (슬랙이 한글 커맨드를 거부할 경우를 대비해 /lunch 도 같이 받습니다.)
+ * 팟 만들기 커맨드를 입력하면 모달을 띄웁니다.
+ * 슬랙 매니페스트에서 커맨드 이름을 바꿨다면 LUNCH_COMMANDS 에 그 이름을 추가하세요.
  */
-for (const commandName of ['/점심팟', '/lunch']) {
+for (const commandName of LUNCH_COMMANDS) {
   app.command(commandName, async ({ command, ack, client }) => {
     await ack(); // 슬랙은 3초 안에 "받았다"고 답하지 않으면 오류로 처리합니다.
 
@@ -415,7 +440,7 @@ async function announceSettled(pot: Pot): Promise<void> {
 // 계좌 등록 (단계와 무관한 부가 기능)
 // ─────────────────────────────────────────────────────────────────────────────
 
-for (const commandName of ['/계좌등록', '/account']) {
+for (const commandName of ACCOUNT_COMMANDS) {
   app.command(commandName, async ({ command, ack, client }) => {
     await ack();
     await client.views.open({
@@ -456,4 +481,6 @@ app.error(async (error) => {
 
 await app.start();
 console.log('🍚 점심팟 봇이 슬랙에 연결됐습니다. (Socket Mode)');
-console.log('   슬랙에서 /점심팟 을 입력해 보세요. 종료는 Ctrl+C');
+// 어떤 커맨드를 받는지 찍어둡니다. 슬랙에 등록한 이름이 여기 없으면 반응이 없습니다.
+console.log(`   받는 커맨드: ${[...LUNCH_COMMANDS, ...ACCOUNT_COMMANDS].join(' ')}`);
+console.log('   종료는 Ctrl+C');
