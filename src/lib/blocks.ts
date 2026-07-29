@@ -30,6 +30,12 @@ export const VIEW = {
   SAVE_ACCOUNT: 'view_save_account',
 } as const;
 
+/**
+ * 모일 수 있는 장소. 여기 적힌 값만 고를 수 있습니다.
+ * 층이 늘어나면 이 배열에만 추가하면 모달에 자동으로 반영됩니다.
+ */
+export const PLACES = ['1F', 'B1'] as const;
+
 // ── 작은 도우미들 ────────────────────────────────────────────────────────────
 
 /** 슬랙에서 <@U123> 이라고 쓰면 사람 이름으로 예쁘게 표시됩니다. */
@@ -74,7 +80,7 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
     context(progressBar(pot.status)),
     section(
       [
-        `*팟장* ${mention(pot.organizer_id)}`,
+        `*파티장* ${mention(pot.organizer_id)}`,
         pot.place ? `*장소* ${pot.place}` : null,
         pot.meet_at ? `*시간* ${pot.meet_at}` : null,
         `*인원* ${capacityText}`,
@@ -107,7 +113,7 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
 function paymentStatusList(pot: Pot, participants: Participant[]): string {
   return participants
     .map((p) => {
-      if (p.slack_user_id === pot.organizer_id) return `💰 ${mention(p.slack_user_id)} (팟장)`;
+      if (p.slack_user_id === pot.organizer_id) return `💰 ${mention(p.slack_user_id)} (파티장)`;
       return `${p.paid === 1 ? '✅' : '⬜'} ${mention(p.slack_user_id)}`;
     })
     .join('\n');
@@ -121,7 +127,7 @@ function potActions(pot: Pot): KnownBlock | null {
   const potId = String(pot.id); // 버튼에 팟 번호를 실어 보내 어떤 팟인지 알아냅니다.
 
   switch (pot.status) {
-    // 1단계 모집중: 누구나 참여/취소, 팟장은 마감
+    // 1단계 모집중: 누구나 참여/취소, 파티장은 마감
     case POT_STATUS.RECRUITING:
       return {
         type: 'actions',
@@ -142,13 +148,13 @@ function potActions(pot: Pot): KnownBlock | null {
           {
             type: 'button',
             action_id: ACTION.CLOSE,
-            text: { type: 'plain_text', text: '🔒 모집 마감 (팟장)', emoji: true },
+            text: { type: 'plain_text', text: '🔒 모집 마감 (파티장)', emoji: true },
             value: potId,
           },
         ],
       };
 
-    // 2단계 모집 완료: 팟장이 금액을 입력해 정산을 시작
+    // 2단계 모집 완료: 파티장이 금액을 입력해 정산을 시작
     case POT_STATUS.CLOSED:
       return {
         type: 'actions',
@@ -156,14 +162,14 @@ function potActions(pot: Pot): KnownBlock | null {
           {
             type: 'button',
             action_id: ACTION.OPEN_SETTLE_MODAL,
-            text: { type: 'plain_text', text: '💸 정산 시작 (팟장)', emoji: true },
+            text: { type: 'plain_text', text: '💸 정산 시작 (파티장)', emoji: true },
             style: 'primary',
             value: potId,
           },
         ],
       };
 
-    // 3단계 정산 중: 팟장이 강제로 마무리할 수 있는 버튼만 남깁니다.
+    // 3단계 정산 중: 파티장이 강제로 마무리할 수 있는 버튼만 남깁니다.
     // (참여자의 "입금 완료" 버튼은 채널이 아니라 각자 받은 DM에 있습니다.)
     case POT_STATUS.SETTLING:
       return {
@@ -172,7 +178,7 @@ function potActions(pot: Pot): KnownBlock | null {
           {
             type: 'button',
             action_id: ACTION.FINISH,
-            text: { type: 'plain_text', text: '✅ 정산 마무리 (팟장)', emoji: true },
+            text: { type: 'plain_text', text: '✅ 정산 마무리 (파티장)', emoji: true },
             value: potId,
           },
         ],
@@ -251,26 +257,31 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
           placeholder: { type: 'plain_text', text: '예: 김치찌개 먹으러 갈 사람' },
         },
       },
+      // 장소: 직접 입력이 아니라 정해진 두 곳 중에서만 고릅니다.
       {
         type: 'input',
         block_id: 'place',
-        optional: true,
-        label: { type: 'plain_text', text: '어디서?' },
+        label: { type: 'plain_text', text: '어디서 모이나요?' },
         element: {
-          type: 'plain_text_input',
+          type: 'static_select',
           action_id: 'value',
-          placeholder: { type: 'plain_text', text: '예: 본사 앞 백반집' },
+          placeholder: { type: 'plain_text', text: '장소 선택' },
+          options: PLACES.map((place) => ({
+            text: { type: 'plain_text' as const, text: place },
+            value: place,
+          })),
         },
       },
+      // 시간: 장소와 완전히 별개 칸입니다. 시간만 적습니다.
       {
         type: 'input',
         block_id: 'meet_at',
         optional: true,
-        label: { type: 'plain_text', text: '언제 모이나요?' },
+        label: { type: 'plain_text', text: '몇 시에 모이나요?' },
         element: {
           type: 'plain_text_input',
           action_id: 'value',
-          placeholder: { type: 'plain_text', text: '예: 12:10 1층 로비' },
+          placeholder: { type: 'plain_text', text: '예: 12:10' },
         },
       },
       {

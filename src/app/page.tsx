@@ -89,8 +89,10 @@ function PotCard({ pot, participants }: { pot: Pot; participants: Participant[] 
           <h2 className="font-semibold">
             {STATUS_EMOJI[pot.status]} {pot.title}
           </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {[pot.place, pot.meet_at].filter(Boolean).join(" · ") || "장소·시간 미정"}
+          {/* 장소와 시간은 서로 다른 값이라 한 줄로 붙이지 않고 따로 보여줍니다. */}
+          <p className="mt-1 flex flex-wrap gap-x-3 text-sm text-slate-500 dark:text-slate-400">
+            <span>📍 {pot.place ?? "미정"}</span>
+            <span>🕐 {pot.meet_at ?? "미정"}</span>
           </p>
         </div>
         <StatusBadge status={pot.status} />

@@ -8,8 +8,8 @@
  *
  * 전체 흐름
  *   /점심팟  → 모달 입력 → 채널에 모집 메시지          [1단계 모집중]
- *   🔒 모집 마감 (팟장)                                  [2단계 모집 완료]
- *   💸 정산 시작 (팟장) → 금액·계좌 입력 → 참여자 DM     [3단계 정산 중]
+ *   🔒 모집 마감 (파티장)                                  [2단계 모집 완료]
+ *   💸 정산 시작 (파티장) → 금액·계좌 입력 → 참여자 DM     [3단계 정산 중]
  *   각자 "✅ 입금했어요" → 전원 완료되면 자동 전환        [4단계 정산 완료]
  */
 
@@ -133,20 +133,27 @@ async function whisper(channel: string, user: string, text: string): Promise<voi
   await client.chat.postEphemeral({ channel, user, text });
 }
 
+/**
+ * 모달이 제출될 때 슬랙이 보내주는 입력값 뭉치.
+ * 칸 종류에 따라 값이 담기는 위치가 다릅니다.
+ *   - 글자·숫자 입력칸 → value
+ *   - 드롭다운(장소 선택) → selected_option.value
+ */
+type ModalValues = Record<
+  string,
+  Record<string, { value?: string | null; selected_option?: { value?: string } | null }>
+>;
+
 /** 모달에서 입력한 값을 꺼냅니다. 비어 있으면 null. */
-function field(
-  values: Record<string, Record<string, { value?: string | null }>>,
-  blockId: string,
-): string | null {
-  const raw = values[blockId]?.value?.value;
+function field(values: ModalValues, blockId: string): string | null {
+  const input = values[blockId]?.value; // action_id 는 모든 칸에서 'value' 로 통일해뒀습니다.
+  const raw = input?.value ?? input?.selected_option?.value;
   const trimmed = raw?.trim();
   return trimmed ? trimmed : null;
 }
 
 /** 모달에서 은행/계좌번호/예금주 3칸을 한 번에 꺼냅니다. 하나라도 비면 null. */
-function accountFromView(
-  values: Record<string, Record<string, { value?: string | null }>>,
-): Account | null {
+function accountFromView(values: ModalValues): Account | null {
   const bank_name = field(values, 'bank_name');
   const account_number = field(values, 'account_number');
   const account_holder = field(values, 'account_holder');
@@ -249,7 +256,7 @@ app.action(ACTION.LEAVE, async ({ ack, body, action }) => {
 // 2단계: 모집 완료
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 🔒 모집 마감 — 팟장만 누를 수 있습니다. (검사는 closePot 안에서 합니다) */
+/** 🔒 모집 마감 — 파티장만 누를 수 있습니다. (검사는 closePot 안에서 합니다) */
 app.action(ACTION.CLOSE, async ({ ack, body, action }) => {
   await ack();
   const potId = Number((action as { value: string }).value);
@@ -282,9 +289,9 @@ app.action(ACTION.OPEN_SETTLE_MODAL, async ({ ack, body, action, client }) => {
   const pot = getPot(potId);
   if (!pot) return;
 
-  // 모달을 열기 전에 먼저 팟장인지 확인합니다. (실제 저장 시 한 번 더 검사합니다)
+  // 모달을 열기 전에 먼저 파티장인지 확인합니다. (실제 저장 시 한 번 더 검사합니다)
   if (pot.organizer_id !== userId) {
-    await whisper(pot.channel_id, userId, '팟장만 정산을 시작할 수 있어요.');
+    await whisper(pot.channel_id, userId, '파티장만 정산을 시작할 수 있어요.');
     return;
   }
 
@@ -325,10 +332,10 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
   const participants = getParticipants(pot.id);
   const perPerson = amountPerPerson(totalAmount, participants.length);
 
-  // 팟장이 계좌를 등록해두지 않았다면, 방금 입력한 계좌를 저장해서 다음에 재사용합니다.
+  // 파티장이 계좌를 등록해두지 않았다면, 방금 입력한 계좌를 저장해서 다음에 재사용합니다.
   if (!getAccount(userId)) saveAccount(userId, null, account);
 
-  // 팟장을 뺀 나머지에게만 DM을 보냅니다. (팟장은 자기한테 입금할 필요가 없으니까요)
+  // 파티장을 뺀 나머지에게만 DM을 보냅니다. (파티장은 자기한테 입금할 필요가 없으니까요)
   for (const participant of participants) {
     if (participant.slack_user_id === pot.organizer_id) continue;
 
@@ -388,7 +395,7 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
     });
   }
 
-  // 팟장에게 입금 알림을 보냅니다.
+  // 파티장에게 입금 알림을 보냅니다.
   await client.chat.postMessage({
     channel: pot.organizer_id,
     text: `💰 ${mention(userId)} 님이 *${pot.title}* ${formatWon(perPerson)}원 입금 완료로 표시했어요.`,
@@ -411,7 +418,7 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
 // 4단계: 정산 완료
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** ✅ 정산 마무리 — 현금으로 받았거나 할 때 팟장이 수동으로 끝낼 수 있습니다. */
+/** ✅ 정산 마무리 — 현금으로 받았거나 할 때 파티장이 수동으로 끝낼 수 있습니다. */
 app.action(ACTION.FINISH, async ({ ack, body, action }) => {
   await ack();
   const potId = Number((action as { value: string }).value);

@@ -48,10 +48,10 @@ function migrate(database: DatabaseSync): void {
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       channel_id     TEXT NOT NULL,
       message_ts     TEXT,               -- 모집 메시지의 타임스탬프(=주소). 버튼 눌릴 때 이 메시지를 수정합니다.
-      organizer_id   TEXT NOT NULL,      -- 팟장(팟을 만든 사람)의 슬랙 ID
+      organizer_id   TEXT NOT NULL,      -- 파티장(팟을 만든 사람)의 슬랙 ID
       title          TEXT NOT NULL,      -- 예: "김치찌개 먹으러 갈 사람"
-      place          TEXT,               -- 가게 이름
-      meet_at        TEXT,               -- 모이는 시간 (자유 입력, 예: "12:10 로비")
+      place          TEXT,               -- 모이는 장소. '1F' 또는 'B1' (blocks.ts 의 PLACES)
+      meet_at        TEXT,               -- 모이는 시간만 (자유 입력, 예: "12:10")
       capacity       INTEGER NOT NULL DEFAULT 0,  -- 정원. 0이면 무제한
       status         TEXT NOT NULL,      -- RECRUITING | CLOSED | SETTLING | SETTLED
       bank_name      TEXT,

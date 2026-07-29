@@ -135,7 +135,7 @@ export type CreatePotInput = {
 };
 
 /**
- * 팟을 만들고, 팟장을 첫 참여자로 자동 등록합니다.
+ * 팟을 만들고, 파티장을 첫 참여자로 자동 등록합니다.
  * 시작 상태는 언제나 RECRUITING(모집중)입니다.
  */
 export function createPot(input: CreatePotInput): Pot {
@@ -166,7 +166,7 @@ export function createPot(input: CreatePotInput): Pot {
 
   const potId = Number(info.lastInsertRowid);
 
-  // 팟장은 자동으로 참여자에 포함됩니다. (본인도 밥을 먹으니까요)
+  // 파티장은 자동으로 참여자에 포함됩니다. (본인도 밥을 먹으니까요)
   db.prepare(
     `INSERT INTO participants (pot_id, slack_user_id, joined_at) VALUES (?, ?, ?)`,
   ).run(potId, input.organizerId, timestamp);
@@ -201,12 +201,12 @@ export function joinPot(potId: number, slackUserId: string): Result<Pot> {
   return ok(getPot(potId)!);
 }
 
-/** 참여를 취소합니다. 팟장은 취소할 수 없습니다(팟이 사라져 버리니까). */
+/** 참여를 취소합니다. 파티장은 취소할 수 없습니다(팟이 사라져 버리니까). */
 export function leavePot(potId: number, slackUserId: string): Result<Pot> {
   const pot = getPot(potId);
   if (!pot) return fail('이미 사라진 팟이에요.');
   if (pot.status !== POT_STATUS.RECRUITING) return fail('모집이 끝나서 취소할 수 없어요.');
-  if (pot.organizer_id === slackUserId) return fail('팟장은 참여를 취소할 수 없어요.');
+  if (pot.organizer_id === slackUserId) return fail('파티장은 참여를 취소할 수 없어요.');
   if (!isParticipant(potId, slackUserId)) return fail('참여하지 않은 팟이에요.');
 
   getDb()
@@ -219,7 +219,7 @@ export function leavePot(potId: number, slackUserId: string): Result<Pot> {
 
 // ── 2단계: 모집 완료 ────────────────────────────────────────────────────────
 
-/** 모집을 마감합니다. 팟장만 할 수 있습니다. */
+/** 모집을 마감합니다. 파티장만 할 수 있습니다. */
 export function closePot(potId: number, actorId: string): Result<Pot> {
   return advance(potId, actorId, POT_STATUS.CLOSED);
 }
@@ -238,7 +238,7 @@ export function startSettlement(
 ): Result<Pot> {
   const pot = getPot(potId);
   if (!pot) return fail('이미 사라진 팟이에요.');
-  if (pot.organizer_id !== actorId) return fail('팟장만 정산을 시작할 수 있어요.');
+  if (pot.organizer_id !== actorId) return fail('파티장만 정산을 시작할 수 있어요.');
   if (!canTransition(pot.status, POT_STATUS.SETTLING)) {
     return fail('지금 단계에서는 정산을 시작할 수 없어요. (모집 완료 상태여야 해요)');
   }
@@ -300,7 +300,7 @@ export function markPaid(
   touch(potId);
 
   const participants = getParticipants(potId);
-  // 팟장은 자기 자신에게 입금할 필요가 없으니 계산에서 뺍니다.
+  // 파티장은 자기 자신에게 입금할 필요가 없으니 계산에서 뺍니다.
   const payers = participants.filter((p) => p.slack_user_id !== pot.organizer_id);
   const allPaid = payers.length > 0 && payers.every((p) => p.paid === 1);
 
@@ -309,7 +309,7 @@ export function markPaid(
 
 // ── 4단계: 정산 완료 ────────────────────────────────────────────────────────
 
-/** 정산을 마무리합니다. 전원 입금 시 봇이 자동 호출하고, 팟장이 수동으로도 누를 수 있습니다. */
+/** 정산을 마무리합니다. 전원 입금 시 봇이 자동 호출하고, 파티장이 수동으로도 누를 수 있습니다. */
 export function finishSettlement(potId: number, actorId: string): Result<Pot> {
   return advance(potId, actorId, POT_STATUS.SETTLED);
 }
@@ -318,12 +318,12 @@ export function finishSettlement(potId: number, actorId: string): Result<Pot> {
 
 /**
  * 상태를 한 칸 옮기는 공통 함수.
- * 1) 팟이 있는지 2) 팟장이 맞는지 3) 규칙상 갈 수 있는 상태인지 를 모두 확인합니다.
+ * 1) 팟이 있는지 2) 파티장이 맞는지 3) 규칙상 갈 수 있는 상태인지 를 모두 확인합니다.
  */
 function advance(potId: number, actorId: string, to: PotStatus): Result<Pot> {
   const pot = getPot(potId);
   if (!pot) return fail('이미 사라진 팟이에요.');
-  if (pot.organizer_id !== actorId) return fail('팟장만 할 수 있는 동작이에요.');
+  if (pot.organizer_id !== actorId) return fail('파티장만 할 수 있는 동작이에요.');
   if (!canTransition(pot.status, to)) return fail('지금 단계에서는 할 수 없는 동작이에요.');
 
   getDb().prepare(`UPDATE pots SET status = ?, updated_at = ? WHERE id = ?`).run(to, now(), potId);
@@ -337,7 +337,7 @@ function touch(potId: number): void {
 
 /**
  * 1인당 낼 금액을 계산합니다.
- * 팟장을 뺀 나머지 인원이 N명이면, 총 금액을 (N+1)로 나눕니다. (팟장 몫도 포함)
+ * 파티장을 뺀 나머지 인원이 N명이면, 총 금액을 (N+1)로 나눕니다. (파티장 몫도 포함)
  * 10원 단위로 올림해서 "1원 남는" 상황을 피합니다.
  */
 export function amountPerPerson(totalAmount: number, headcount: number): number {
