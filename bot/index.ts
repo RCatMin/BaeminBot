@@ -84,16 +84,16 @@ function requireToken(name: string, prefix: string, where: string): string {
  *    "아무 반응이 없는" 상태가 됩니다.
  *
  * 코드를 안 고치고 .env.local 에서 바꿀 수도 있습니다.
- *    SLACK_LUNCH_COMMANDS=/밥먹자,/점심팟
+ *    SLACK_LUNCH_COMMANDS=/밥먹자,/모여라
  */
-const LUNCH_COMMANDS = commandList('SLACK_LUNCH_COMMANDS', ['/점심팟', '/밥먹자', '/lunch']);
+const LUNCH_COMMANDS = commandList('SLACK_LUNCH_COMMANDS', ['/모여라', '/밥먹자', '/eat']);
 const ACCOUNT_COMMANDS = commandList('SLACK_ACCOUNT_COMMANDS', ['/계좌등록', '/account']);
 
 function commandList(envName: string, fallback: string[]): string[] {
   const raw = process.env[envName]?.trim();
   if (!raw) return fallback;
 
-  // "밥먹자, /점심팟" 처럼 적어도 되도록 공백을 지우고 슬래시를 붙여줍니다.
+  // "밥먹자, /모여라" 처럼 적어도 되도록 공백을 지우고 슬래시를 붙여줍니다.
   return raw
     .split(',')
     .map((name) => name.trim())

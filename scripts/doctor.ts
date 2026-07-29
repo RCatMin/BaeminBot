@@ -94,6 +94,19 @@ for (const { scope, why } of OPTIONAL_SCOPES) {
   }
 }
 
+console.log(`   지금 토큰에 붙어 있는 권한 전체: ${granted.join(', ') || '(없음)'}`);
+
+if (hasProblem) {
+  // 여기가 제일 헷갈리는 지점입니다. 권한은 "앱"이 아니라 "토큰"에 붙어 있어서,
+  // 매니페스트를 고쳐도 새 토큰을 안 가져오면 예전 권한이 그대로 보입니다.
+  console.log('');
+  console.log('   권한이 없다고 나오면 아래 세 가지를 순서대로 확인하세요:');
+  console.log('     1) 매니페스트가 실제로 저장됐는지 (저장 실패 시 아무것도 안 바뀝니다)');
+  console.log('     2) 저장 후 "Reinstall your app" 을 눌렀는지');
+  console.log('     3) 재설치로 새로 발급된 xoxb- 토큰을 .env.local 에 넣었는지');
+  console.log('        ← 예전 토큰을 그대로 두면 예전 권한이 계속 보입니다. 가장 흔한 실수입니다.');
+}
+
 // ── 3. 앱 토큰으로 웹소켓 연결이 되는지 ─────────────────────────────────────
 
 console.log('\n3. Socket Mode 연결 확인');
