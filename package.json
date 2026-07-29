@@ -9,6 +9,7 @@
     "bot:dev": "node --env-file-if-exists=.env.local --watch bot/index.ts",
     "build": "next build",
     "start": "next start",
+    "doctor": "node --env-file-if-exists=.env.local scripts/doctor.ts",
     "seed": "node scripts/seed.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint"
