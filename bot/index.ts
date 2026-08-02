@@ -152,6 +152,21 @@ function field(values: ModalValues, blockId: string): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** 계좌 입력 3칸의 block_id. 여러 곳에서 함께 다뤄서 한 곳에 모아둡니다. */
+const ACCOUNT_FIELDS = ['bank_name', 'account_number', 'account_holder'] as const;
+
+/**
+ * 계좌 3칸 중 "일부만" 채웠는지 확인합니다.
+ *
+ * 팟을 만들 때 계좌는 선택 사항이라 전부 비워도 괜찮습니다.
+ * 하지만 일부만 적으면 accountFromView가 null을 돌려줘서 적은 내용이 통째로 버려집니다.
+ * 그러면 사용자는 계좌를 적었다고 생각하는데 저장은 안 되는 상태가 되므로, 미리 알려줍니다.
+ */
+function isPartialAccount(values: ModalValues): boolean {
+  const filled = ACCOUNT_FIELDS.filter((id) => field(values, id));
+  return filled.length > 0 && filled.length < ACCOUNT_FIELDS.length;
+}
+
 /** 모달에서 은행/계좌번호/예금주 3칸을 한 번에 꺼냅니다. 하나라도 비면 null. */
 function accountFromView(values: ModalValues): Account | null {
   const bank_name = field(values, 'bank_name');
@@ -190,6 +205,18 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
     await ack({ response_action: 'errors', errors: { title: '뭘 먹을지 적어주세요.' } });
     return;
   }
+
+  // 계좌는 안 적어도 되지만, 적을 거면 세 칸을 다 채워야 저장됩니다.
+  if (isPartialAccount(values)) {
+    await ack({
+      response_action: 'errors',
+      errors: {
+        account_holder: '계좌를 적으시려면 은행 · 계좌번호 · 예금주를 모두 채워주세요. (전부 비워두셔도 됩니다)',
+      },
+    });
+    return;
+  }
+
   await ack();
 
   const channelId = view.private_metadata; // 모달을 연 채널을 기억해뒀던 값

@@ -337,7 +337,9 @@ export function startSettlementModal(pot: Pot, fallback: Account | null): View {
         },
       },
       { type: 'divider' },
-      ...accountInputs(prefill, '입금받을 계좌'),
+      // 여기서는 계좌가 반드시 있어야 DM을 보낼 수 있으므로 필수 칸으로 만듭니다.
+      // (선택으로 두면 "(옵션)"이라고 적혀 있는데 비우면 오류가 나서 앞뒤가 안 맞습니다.)
+      ...accountInputs(prefill, '입금받을 계좌', /* required */ true),
     ],
   };
 }
