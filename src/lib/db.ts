@@ -6,7 +6,7 @@
  */
 
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 /*
@@ -23,7 +23,58 @@ const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
 
 type DatabaseSync = DatabaseSyncType;
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+/**
+ * DB 파일을 어디에 둘지 정합니다.
+ *
+ * 예전에는 process.cwd() — 즉 "명령을 실행한 폴더" 기준이었습니다.
+ * 그래서 프로젝트 밖에서 봇을 켜면 그동안 쌓인 팟이 안 보이고,
+ * 엉뚱한 자리에 빈 data 폴더가 새로 생겼습니다.
+ *
+ * 이제는 "프로젝트 폴더"를 직접 찾아냅니다. 순서대로 시도합니다.
+ */
+function resolveDataDir(): string {
+  // 1) 직접 지정했다면 그 값을 씁니다. (배포처럼 특별한 경우용)
+  const fromEnv = process.env.BAEMIN_BOT_DATA_DIR?.trim();
+  if (fromEnv) return path.resolve(fromEnv);
+
+  // 2) 이 소스 파일 위치에서 올라가며 찾습니다. src/lib/db.ts → 두 단계 위가 프로젝트 폴더.
+  //    번들러를 거치면 이 경로가 실제 소스가 아닐 수 있어서, 반드시 확인 후에 씁니다.
+  const here = import.meta.dirname;
+  if (here) {
+    const guess = path.resolve(here, '..', '..');
+    if (isProjectRoot(guess)) return path.join(guess, 'data');
+  }
+
+  // 3) 실행한 폴더에서 위로 올라가며 찾습니다. (프로젝트 안 하위 폴더에서 실행한 경우)
+  let dir = process.cwd();
+  for (let depth = 0; depth < 12; depth++) {
+    if (isProjectRoot(dir)) return path.join(dir, 'data');
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // 최상위까지 올라왔으면 그만
+    dir = parent;
+  }
+
+  // 4) 끝내 못 찾으면 조용히 빈 DB를 만들지 말고 알려줍니다.
+  console.warn(
+    `⚠️ 프로젝트 폴더를 찾지 못해 현재 위치(${process.cwd()})에 data 폴더를 만듭니다.\n` +
+      `   기존 데이터가 안 보인다면 BaeminBot 폴더에서 실행하거나 BAEMIN_BOT_DATA_DIR 을 지정하세요.`,
+  );
+  return path.join(process.cwd(), 'data');
+}
+
+/** 이 폴더가 우리 프로젝트의 최상위인지 package.json 이름으로 확인합니다. */
+function isProjectRoot(dir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as {
+      name?: string;
+    };
+    return pkg.name === 'baemin-bot';
+  } catch {
+    return false; // package.json 이 없거나 읽을 수 없으면 여기가 아닙니다.
+  }
+}
+
+const DATA_DIR = resolveDataDir();
 const DB_PATH = path.join(DATA_DIR, 'baemin-bot.db');
 
 // 슬랙봇 프로세스와 Next.js 프로세스가 각각 이 파일을 불러오므로,

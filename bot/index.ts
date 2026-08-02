@@ -128,9 +128,32 @@ async function refreshPotMessage(pot: Pot): Promise<void> {
   });
 }
 
-/** 버튼을 누른 본인에게만 보이는 안내 메시지. 다른 사람에겐 안 보입니다. */
-async function whisper(channel: string, user: string, text: string): Promise<void> {
-  await client.chat.postEphemeral({ channel, user, text });
+/** 버튼 클릭 정보에서 우리가 실제로 쓰는 부분만 추린 모양. */
+type ClickBody = { user: { id: string }; channel?: { id?: string } };
+
+/**
+ * 버튼을 누른 본인에게만 보이는 안내를 보냅니다. 다른 사람에겐 안 보입니다.
+ *
+ * 채널은 "클릭이 일어난 곳"에서 가져옵니다. DB에서 팟을 찾아 채널을 알아내면,
+ * 정작 팟이 사라졌을 때(= 그 사실을 안내해야 하는 바로 그 상황) 다시 실패합니다.
+ *
+ * 채널을 못 찾거나 봇이 그 채널에 없어서 실패하면 DM으로 보냅니다.
+ * 안내를 아예 못 보내는 것보다는 낫습니다.
+ */
+async function replyToClick(body: ClickBody, text: string): Promise<void> {
+  const user = body.user.id;
+  const channel = body.channel?.id;
+
+  if (channel) {
+    try {
+      await client.chat.postEphemeral({ channel, user, text });
+      return;
+    } catch (error) {
+      console.error('안내 메시지 발송 실패, DM으로 재시도합니다:', error);
+    }
+  }
+
+  await client.chat.postMessage({ channel: user, text });
 }
 
 /**
@@ -259,7 +282,7 @@ app.action(ACTION.JOIN, async ({ ack, body, action }) => {
 
   const result = joinPot(potId, userId);
   if (!result.ok) {
-    await whisper(getPot(potId)!.channel_id, userId, result.error);
+    await replyToClick(body, result.error);
     return;
   }
   await refreshPotMessage(result.value);
@@ -273,7 +296,7 @@ app.action(ACTION.LEAVE, async ({ ack, body, action }) => {
 
   const result = leavePot(potId, userId);
   if (!result.ok) {
-    await whisper(getPot(potId)!.channel_id, userId, result.error);
+    await replyToClick(body, result.error);
     return;
   }
   await refreshPotMessage(result.value);
@@ -291,7 +314,7 @@ app.action(ACTION.CLOSE, async ({ ack, body, action }) => {
 
   const result = closePot(potId, userId);
   if (!result.ok) {
-    await whisper(getPot(potId)!.channel_id, userId, result.error);
+    await replyToClick(body, result.error);
     return;
   }
 
@@ -314,11 +337,15 @@ app.action(ACTION.OPEN_SETTLE_MODAL, async ({ ack, body, action, client }) => {
   const potId = Number((action as { value: string }).value);
   const userId = body.user.id;
   const pot = getPot(potId);
-  if (!pot) return;
+  if (!pot) {
+    // 조용히 넘어가면 사용자에겐 "버튼이 먹통"으로 보입니다.
+    await replyToClick(body, '이미 사라진 팟이에요. 예전 메시지의 버튼일 수 있어요.');
+    return;
+  }
 
   // 모달을 열기 전에 먼저 파티장인지 확인합니다. (실제 저장 시 한 번 더 검사합니다)
   if (pot.organizer_id !== userId) {
-    await whisper(pot.channel_id, userId, '파티장만 정산을 시작할 수 있어요.');
+    await replyToClick(body, '파티장만 정산을 시작할 수 있어요.');
     return;
   }
 
@@ -453,7 +480,7 @@ app.action(ACTION.FINISH, async ({ ack, body, action }) => {
 
   const result = finishSettlement(potId, userId);
   if (!result.ok) {
-    await whisper(getPot(potId)!.channel_id, userId, result.error);
+    await replyToClick(body, result.error);
     return;
   }
 
