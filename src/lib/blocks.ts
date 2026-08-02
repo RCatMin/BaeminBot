@@ -21,6 +21,7 @@ export const ACTION = {
   CLOSE: 'pot_close',
   OPEN_SETTLE_MODAL: 'pot_open_settle_modal',
   MARK_PAID: 'pot_mark_paid',
+  RESEND_DM: 'pot_resend_dm',
   FINISH: 'pot_finish',
 } as const;
 
@@ -169,12 +170,19 @@ function potActions(pot: Pot): KnownBlock | null {
         ],
       };
 
-    // 3단계 정산 중: 파티장이 강제로 마무리할 수 있는 버튼만 남깁니다.
-    // (참여자의 "입금 완료" 버튼은 채널이 아니라 각자 받은 DM에 있습니다.)
+    // 3단계 정산 중: 파티장용 버튼만 남깁니다.
+    // (참여자의 "입금 완료" 버튼은 채널이 아니라 각자 받은 DM에 있습니다.
+    //  그래서 DM이 안 갔다면 재발송 버튼이 유일한 복구 수단입니다.)
     case POT_STATUS.SETTLING:
       return {
         type: 'actions',
         elements: [
+          {
+            type: 'button',
+            action_id: ACTION.RESEND_DM,
+            text: { type: 'plain_text', text: '📨 정산 DM 다시 보내기', emoji: true },
+            value: potId,
+          },
           {
             type: 'button',
             action_id: ACTION.FINISH,

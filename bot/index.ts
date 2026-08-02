@@ -29,6 +29,7 @@ import {
   amountPerPerson,
   closePot,
   createPot,
+  deletePot,
   finishSettlement,
   formatWon,
   getAccount,
@@ -44,7 +45,7 @@ import {
   type Account,
   type Pot,
 } from '../src/lib/pots.ts';
-import { STATUS_LABEL } from '../src/lib/status.ts';
+import { POT_STATUS, STATUS_LABEL } from '../src/lib/status.ts';
 
 // ── 준비 ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,20 @@ const app = new App({
 
 // 슬랙 API를 부를 때 쓰는 클라이언트. (DM 보내기, 메시지 수정 등)
 const client = app.client;
+
+/**
+ * 이 봇 자신의 슬랙 사용자 ID. 시작할 때 슬랙에 물어봐서 채웁니다.
+ *
+ * 안내문에 봇 이름을 직접 적어두면 슬랙에서 이름을 바꿨을 때 어긋납니다.
+ * (실제로 "@점심팟봇으로 초대하세요"라고 적혀 있었지만 이름은 "밥머거"였습니다.)
+ * ID로 멘션하면 슬랙이 현재 이름으로 알아서 보여줍니다.
+ */
+let botUserId: string | null = null;
+
+/** 안내문에 넣을 봇 멘션. 아직 ID를 모르면 그냥 "봇"이라고 씁니다. */
+function botMention(): string {
+  return botUserId ? `<@${botUserId}>` : '봇';
+}
 
 // ── 공통 도우미 ─────────────────────────────────────────────────────────────
 
@@ -263,13 +278,23 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
       blocks: potMessage(pot, getParticipants(pot.id)),
     });
     // 올린 메시지의 주소(ts)를 저장해둬야 나중에 이 메시지를 수정할 수 있습니다.
-    if (posted.ts) setPotMessage(pot.id, posted.ts);
+    // 주소를 못 받으면 버튼을 갱신할 수 없어 쓸모없는 팟이 되므로 실패로 봅니다.
+    if (!posted.ts) throw new Error('메시지는 올렸지만 주소를 받지 못했습니다.');
+    setPotMessage(pot.id, posted.ts);
   } catch (error) {
     // 봇이 채널에 초대되지 않았을 때 가장 흔히 나는 오류입니다.
     console.error('모집 메시지 발송 실패:', error);
+
+    // 팟을 되돌립니다. 그냥 두면 참여·마감·정산 버튼이 하나도 없는 팟이
+    // 영원히 "모집중"으로 남습니다. (지울 방법도 없습니다)
+    deletePot(pot.id);
+
     await client.chat.postMessage({
       channel: userId,
-      text: `⚠️ 팟은 만들었지만 채널에 메시지를 올리지 못했어요.\n해당 채널에서 \`/invite @점심팟봇\` 으로 봇을 먼저 초대해 주세요.`,
+      text:
+        `⚠️ *${title}* 팟을 만들지 못했어요. 채널에 메시지를 올릴 수 없었습니다.\n` +
+        `해당 채널에 ${botMention()} 를 먼저 초대한 뒤 다시 시도해 주세요.\n` +
+        `(채널에서 \`/invite\` 를 입력하고 봇을 고르시면 됩니다)`,
     });
   }
 });
@@ -389,36 +414,61 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
   // 파티장이 계좌를 등록해두지 않았다면, 방금 입력한 계좌를 저장해서 다음에 재사용합니다.
   if (!getAccount(userId)) saveAccount(userId, null, account);
 
-  // 파티장을 뺀 나머지에게만 DM을 보냅니다. (파티장은 자기한테 입금할 필요가 없으니까요)
-  for (const participant of participants) {
-    if (participant.slack_user_id === pot.organizer_id) continue;
-
-    try {
-      // 1) 이 사람과의 1:1 대화방을 엽니다(이미 있으면 그 방을 돌려줍니다).
-      const dm = await client.conversations.open({ users: participant.slack_user_id });
-      const dmChannel = dm.channel?.id;
-      if (!dmChannel) continue;
-
-      // 2) 그 방에 정산 안내를 보냅니다.
-      const sent = await client.chat.postMessage({
-        channel: dmChannel,
-        text: `💸 ${pot.title} 정산 ${formatWon(perPerson)}원`,
-        blocks: settlementDm(pot, perPerson, false),
-      });
-
-      // 3) 나중에 "입금했어요"를 누르면 이 DM을 고쳐야 하므로 주소를 저장합니다.
-      if (sent.ts) setDmRef(pot.id, participant.slack_user_id, dmChannel, sent.ts);
-    } catch (error) {
-      console.error(`DM 발송 실패 (${participant.slack_user_id}):`, error);
-    }
-  }
+  const { sent, failed } = await sendSettlementDms(pot);
 
   await refreshPotMessage(pot);
+
+  // 채널 스레드에도 결과를 그대로 적습니다. 실패를 숨기지 않습니다.
+  const summary =
+    failed.length === 0
+      ? `💸 정산이 시작됐어요. 1인당 *${formatWon(perPerson)}원* — 참여자분들 DM 확인해 주세요!`
+      : `💸 정산이 시작됐어요. 1인당 *${formatWon(perPerson)}원*\n` +
+        `⚠️ ${sent.length}명에게는 DM이 갔지만 ${failed.length}명에게는 보내지 못했어요: ` +
+        `${failed.map(mention).join(', ')}`;
+
   await client.chat.postMessage({
     channel: pot.channel_id,
     thread_ts: pot.message_ts ?? undefined,
-    text: `💸 정산이 시작됐어요. 1인당 *${formatWon(perPerson)}원* — 참여자분들 DM 확인해 주세요!`,
+    text: summary,
   });
+
+  await reportDmFailures(pot, failed);
+});
+
+/** 📨 정산 DM 다시 보내기 — 아직 DM을 못 받은 사람에게만 다시 보냅니다. */
+app.action(ACTION.RESEND_DM, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const pot = getPot(potId);
+  if (!pot) {
+    await replyToClick(body, '이미 사라진 팟이에요.');
+    return;
+  }
+  if (pot.organizer_id !== userId) {
+    await replyToClick(body, '파티장만 다시 보낼 수 있어요.');
+    return;
+  }
+  if (pot.status !== POT_STATUS.SETTLING) {
+    await replyToClick(body, '정산 중일 때만 다시 보낼 수 있어요.');
+    return;
+  }
+
+  const { sent, failed } = await sendSettlementDms(pot, { onlyMissing: true });
+
+  if (sent.length === 0 && failed.length === 0) {
+    await replyToClick(body, '참여자 모두 이미 DM을 받았어요.');
+    return;
+  }
+
+  await replyToClick(
+    body,
+    failed.length === 0
+      ? `📨 ${sent.length}명에게 다시 보냈어요.`
+      : `📨 ${sent.length}명에게 보냈고, ${failed.length}명은 이번에도 실패했어요.`,
+  );
+  await reportDmFailures(pot, failed);
 });
 
 /** ✅ 입금했어요 (DM에서 누름) */
@@ -467,6 +517,71 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
 
   await refreshPotMessage(pot);
 });
+
+/**
+ * 참여자들에게 정산 DM을 보냅니다. (파티장은 자기한테 입금할 일이 없으니 제외)
+ *
+ * 누구에게 성공하고 실패했는지 돌려줍니다. 예전에는 실패를 터미널에만 적고
+ * 넘어가서, 파티장은 DM이 갔다고 믿고 기다리고 참여자는 받은 게 없어
+ * 아무도 상황을 모르는 채로 멈춰 있었습니다.
+ *
+ * onlyMissing = true 면 아직 DM을 못 받은 사람에게만 보냅니다. (재발송용)
+ */
+async function sendSettlementDms(
+  pot: Pot,
+  { onlyMissing = false }: { onlyMissing?: boolean } = {},
+): Promise<{ sent: string[]; failed: string[] }> {
+  const participants = getParticipants(pot.id);
+  const perPerson = amountPerPerson(pot.total_amount ?? 0, participants.length);
+
+  const sent: string[] = [];
+  const failed: string[] = [];
+
+  for (const participant of participants) {
+    if (participant.slack_user_id === pot.organizer_id) continue;
+    if (onlyMissing && participant.dm_ts) continue; // 이미 받은 사람은 건너뜁니다.
+
+    try {
+      // 1) 이 사람과의 1:1 대화방을 엽니다(이미 있으면 그 방을 돌려줍니다).
+      const dm = await client.conversations.open({ users: participant.slack_user_id });
+      const dmChannel = dm.channel?.id;
+      if (!dmChannel) throw new Error('DM 대화방을 열지 못했습니다.');
+
+      // 2) 그 방에 정산 안내를 보냅니다.
+      const posted = await client.chat.postMessage({
+        channel: dmChannel,
+        text: `💸 ${pot.title} 정산 ${formatWon(perPerson)}원`,
+        blocks: settlementDm(pot, perPerson, participant.paid === 1),
+      });
+      // 주소를 못 받으면 나중에 이 DM을 고칠 수 없으므로 실패로 봅니다.
+      if (!posted.ts) throw new Error('DM은 보냈지만 메시지 주소를 받지 못했습니다.');
+
+      // 3) "입금했어요"를 누르면 이 DM을 고쳐야 하므로 주소를 저장합니다.
+      setDmRef(pot.id, participant.slack_user_id, dmChannel, posted.ts);
+      sent.push(participant.slack_user_id);
+    } catch (error) {
+      console.error(`DM 발송 실패 (${participant.slack_user_id}):`, error);
+      failed.push(participant.slack_user_id);
+    }
+  }
+
+  return { sent, failed };
+}
+
+/** DM을 못 받은 사람이 있으면 파티장에게 알리고, 무엇을 하면 되는지 일러줍니다. */
+async function reportDmFailures(pot: Pot, failed: string[]): Promise<void> {
+  if (failed.length === 0) return;
+
+  await client.chat.postMessage({
+    channel: pot.organizer_id,
+    text:
+      `⚠️ *${pot.title}* — ${failed.length}명에게 정산 DM을 보내지 못했어요.\n` +
+      `${failed.map(mention).join(', ')}\n\n` +
+      `봇과 DM을 주고받을 수 없는 설정이거나 워크스페이스를 떠났을 수 있어요.\n` +
+      `채널의 모집 메시지에서 *📨 정산 DM 다시 보내기* 를 눌러 재시도할 수 있고,\n` +
+      `계속 안 되면 계좌를 직접 알려주신 뒤 *✅ 정산 마무리* 로 끝내시면 됩니다.`,
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4단계: 정산 완료
@@ -541,7 +656,18 @@ app.error(async (error) => {
 });
 
 await app.start();
-console.log('🍚 점심팟 봇이 슬랙에 연결됐습니다. (Socket Mode)');
+
+// 내가 누구인지 슬랙에 물어봅니다. 안내문에서 봇을 멘션할 때 씁니다.
+// 실패해도 봇은 정상 동작하므로 오류를 남기고 넘어갑니다.
+try {
+  const me = await client.auth.test();
+  botUserId = me.user_id ?? null;
+  console.log(`🍚 점심팟 봇이 슬랙에 연결됐습니다. (Socket Mode) — ${me.user}`);
+} catch (error) {
+  console.error('봇 정보를 가져오지 못했습니다(동작에는 문제 없음):', error);
+  console.log('🍚 점심팟 봇이 슬랙에 연결됐습니다. (Socket Mode)');
+}
+
 // 어떤 커맨드를 받는지 찍어둡니다. 슬랙에 등록한 이름이 여기 없으면 반응이 없습니다.
 console.log(`   받는 커맨드: ${[...LUNCH_COMMANDS, ...ACCOUNT_COMMANDS].join(' ')}`);
 console.log('   종료는 Ctrl+C');

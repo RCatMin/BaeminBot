@@ -174,6 +174,17 @@ export function createPot(input: CreatePotInput): Pot {
   return getPot(potId)!;
 }
 
+/**
+ * 팟을 지웁니다. 참여자 기록도 함께 사라집니다(ON DELETE CASCADE).
+ *
+ * 지금은 "만들다가 실패했을 때 되돌리는 용도"로만 씁니다.
+ * 채널에 모집 메시지를 못 올리면 버튼이 하나도 없는 팟이 남는데,
+ * 그런 팟은 참여도 마감도 정산도 할 수 없어서 아예 없애는 편이 낫습니다.
+ */
+export function deletePot(potId: number): void {
+  getDb().prepare(`DELETE FROM pots WHERE id = ?`).run(potId);
+}
+
 /** 슬랙에 메시지를 보낸 뒤, 그 메시지 주소를 팟에 기록합니다. */
 export function setPotMessage(potId: number, messageTs: string): void {
   getDb()
