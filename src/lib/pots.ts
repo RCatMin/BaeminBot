@@ -198,6 +198,7 @@ export function setPotMessage(potId: number, messageTs: string): void {
 export function joinPot(potId: number, slackUserId: string): Result<Pot> {
   const pot = getPot(potId);
   if (!pot) return fail('이미 사라진 팟이에요.');
+  if (pot.status === POT_STATUS.CANCELLED) return fail('취소된 팟이에요.');
   if (pot.status !== POT_STATUS.RECRUITING) return fail('모집이 끝난 팟이에요.');
   if (isParticipant(potId, slackUserId)) return fail('이미 참여 중이에요.');
 
@@ -216,6 +217,7 @@ export function joinPot(potId: number, slackUserId: string): Result<Pot> {
 export function leavePot(potId: number, slackUserId: string): Result<Pot> {
   const pot = getPot(potId);
   if (!pot) return fail('이미 사라진 팟이에요.');
+  if (pot.status === POT_STATUS.CANCELLED) return fail('취소된 팟이에요.');
   if (pot.status !== POT_STATUS.RECRUITING) return fail('모집이 끝나서 취소할 수 없어요.');
   if (pot.organizer_id === slackUserId) return fail('파티장은 참여를 취소할 수 없어요.');
   if (!isParticipant(potId, slackUserId)) return fail('참여하지 않은 팟이에요.');
@@ -323,6 +325,44 @@ export function markPaid(
 /** 정산을 마무리합니다. 전원 입금 시 봇이 자동 호출하고, 파티장이 수동으로도 누를 수 있습니다. */
 export function finishSettlement(potId: number, actorId: string): Result<Pot> {
   return advance(potId, actorId, POT_STATUS.SETTLED);
+}
+
+/**
+ * 정산 완료된 팟을 다시 정산 중으로 되돌립니다. 파티장만 할 수 있습니다.
+ *
+ * 왜 필요한가: 마지막 사람이 "입금했어요"를 잘못 누르면 전원 완료로 판정되어
+ * 팟이 곧바로 정산 완료로 넘어갑니다. 실제로는 돈이 안 들어왔는데 끝난 것으로
+ * 남으므로, 파티장이 되돌릴 수 있어야 합니다.
+ *
+ * 이건 규칙표(ALLOWED_TRANSITIONS)를 타지 않는 의도적인 예외입니다.
+ * 규칙표에 넣으면 "정산 완료의 다음 단계는 정산 중"인 것처럼 보여서
+ * 앞으로 가는 흐름이 헷갈리기 때문에 여기서 직접 처리합니다.
+ */
+export function reopenSettlement(potId: number, actorId: string): Result<Pot> {
+  const pot = getPot(potId);
+  if (!pot) return fail('이미 사라진 팟이에요.');
+  if (pot.organizer_id !== actorId) return fail('파티장만 다시 열 수 있어요.');
+  if (pot.status !== POT_STATUS.SETTLED) {
+    return fail('정산 완료된 팟만 다시 열 수 있어요.');
+  }
+
+  getDb()
+    .prepare(`UPDATE pots SET status = ?, updated_at = ? WHERE id = ?`)
+    .run(POT_STATUS.SETTLING, now(), potId);
+
+  return ok(getPot(potId)!);
+}
+
+// ── 취소 (4단계 흐름 바깥) ──────────────────────────────────────────────────
+
+/**
+ * 팟을 취소합니다. 파티장만, 그리고 정산이 끝나기 전까지만 가능합니다.
+ *
+ * 기록은 남깁니다. 지워버리면 누가 왜 취소했는지 알 수 없고,
+ * 실수로 눌렀을 때 되짚어볼 방법도 사라집니다.
+ */
+export function cancelPot(potId: number, actorId: string): Result<Pot> {
+  return advance(potId, actorId, POT_STATUS.CANCELLED);
 }
 
 // ── 공통 도우미 ─────────────────────────────────────────────────────────────

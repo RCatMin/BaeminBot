@@ -21,8 +21,11 @@ export const ACTION = {
   CLOSE: 'pot_close',
   OPEN_SETTLE_MODAL: 'pot_open_settle_modal',
   MARK_PAID: 'pot_mark_paid',
+  UNMARK_PAID: 'pot_unmark_paid',
   RESEND_DM: 'pot_resend_dm',
   FINISH: 'pot_finish',
+  REOPEN: 'pot_reopen',
+  CANCEL: 'pot_cancel',
 } as const;
 
 export const VIEW = {
@@ -57,9 +60,22 @@ const context = (text: string): KnownBlock => ({
  * 예) *모집중* ─ 모집 완료 ─ 정산 중 ─ 정산 완료
  */
 function progressBar(status: PotStatus): string {
+  // 취소된 팟은 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
+  if (status === POT_STATUS.CANCELLED) return `🚫 *취소된 팟이에요*`;
+
   return STATUS_ORDER.map((s) => (s === status ? `*${STATUS_LABEL[s]}*` : STATUS_LABEL[s])).join(
     ' ─ ',
   );
+}
+
+/** 파티장만 누를 수 있는 취소 버튼. 정산이 끝나기 전 단계에 공통으로 붙습니다. */
+function cancelButton(potId: string) {
+  return {
+    type: 'button' as const,
+    action_id: ACTION.CANCEL,
+    text: { type: 'plain_text' as const, text: '🚫 팟 취소 (파티장)', emoji: true },
+    value: potId,
+  };
 }
 
 // ── 채널에 올라가는 모집 메시지 ──────────────────────────────────────────────
@@ -152,6 +168,7 @@ function potActions(pot: Pot): KnownBlock | null {
             text: { type: 'plain_text', text: '🔒 모집 마감 (파티장)', emoji: true },
             value: potId,
           },
+          cancelButton(potId),
         ],
       };
 
@@ -167,6 +184,7 @@ function potActions(pot: Pot): KnownBlock | null {
             style: 'primary',
             value: potId,
           },
+          cancelButton(potId),
         ],
       };
 
@@ -189,11 +207,27 @@ function potActions(pot: Pot): KnownBlock | null {
             text: { type: 'plain_text', text: '✅ 정산 마무리 (파티장)', emoji: true },
             value: potId,
           },
+          cancelButton(potId),
         ],
       };
 
-    // 4단계 정산 완료: 더 이상 누를 게 없습니다.
+    // 4단계 정산 완료: 잘못 끝난 경우를 위해 되돌리는 버튼만 남깁니다.
+    // (마지막 사람이 "입금했어요"를 잘못 누르면 여기까지 자동으로 와버립니다)
     case POT_STATUS.SETTLED:
+      return {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            action_id: ACTION.REOPEN,
+            text: { type: 'plain_text', text: '🔄 정산 다시 열기 (파티장)', emoji: true },
+            value: potId,
+          },
+        ],
+      };
+
+    // 취소됨: 더 이상 누를 게 없습니다.
+    case POT_STATUS.CANCELLED:
     default:
       return null;
   }
@@ -219,8 +253,20 @@ export function settlementDm(
   ];
 
   if (paid) {
-    // 이미 입금 완료를 누른 사람에게는 버튼 대신 완료 표시를 보여줍니다.
+    // 이미 입금 완료를 누른 사람에게는 완료 표시와 함께 되돌리는 버튼을 줍니다.
+    // (잘못 눌렀는데 되돌릴 방법이 없으면 파티장에게 따로 부탁하는 수밖에 없습니다)
     blocks.push(section('✅ *입금 완료로 표시했어요.* 고맙습니다!'));
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          action_id: ACTION.UNMARK_PAID,
+          text: { type: 'plain_text', text: '↩️ 잘못 눌렀어요', emoji: true },
+          value: String(pot.id),
+        },
+      ],
+    });
   } else {
     blocks.push({
       type: 'actions',

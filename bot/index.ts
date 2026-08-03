@@ -27,6 +27,7 @@ import {
 } from '../src/lib/blocks.ts';
 import {
   amountPerPerson,
+  cancelPot,
   closePot,
   createPot,
   deletePot,
@@ -38,6 +39,7 @@ import {
   joinPot,
   leavePot,
   markPaid,
+  reopenSettlement,
   saveAccount,
   setDmRef,
   setPotMessage,
@@ -485,19 +487,9 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
   }
 
   const { pot, allPaid } = result.value;
-  const participants = getParticipants(pot.id);
-  const perPerson = amountPerPerson(pot.total_amount ?? 0, participants.length);
+  const perPerson = perPersonOf(pot);
 
-  // 방금 누른 사람의 DM을 "완료" 모습으로 바꿔줍니다. (버튼 사라짐)
-  const me = participants.find((p) => p.slack_user_id === userId);
-  if (me?.dm_channel_id && me.dm_ts) {
-    await client.chat.update({
-      channel: me.dm_channel_id,
-      ts: me.dm_ts,
-      text: `✅ ${pot.title} 입금 완료`,
-      blocks: settlementDm(pot, perPerson, true),
-    });
-  }
+  await refreshSettlementDm(pot, userId, true);
 
   // 파티장에게 입금 알림을 보냅니다.
   await client.chat.postMessage({
@@ -514,6 +506,35 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
       return;
     }
   }
+
+  await refreshPotMessage(pot);
+});
+
+/** ↩️ 잘못 눌렀어요 — 입금 완료를 되돌립니다. (DM에서 누름) */
+app.action(ACTION.UNMARK_PAID, async ({ ack, body, action, client }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = markPaid(potId, userId, false);
+  if (!result.ok) {
+    // 자동으로 정산 완료까지 가버린 경우가 여기에 걸립니다. 무엇을 하면 되는지 알려줍니다.
+    const pot = getPot(potId);
+    const hint =
+      pot?.status === POT_STATUS.SETTLED
+        ? `\n이미 정산이 끝난 팟이에요. ${mention(pot.organizer_id)} 님에게 *🔄 정산 다시 열기* 를 눌러달라고 부탁해 주세요.`
+        : '';
+    await client.chat.postMessage({ channel: userId, text: result.error + hint });
+    return;
+  }
+
+  const { pot } = result.value;
+  await refreshSettlementDm(pot, userId, false);
+
+  await client.chat.postMessage({
+    channel: pot.organizer_id,
+    text: `↩️ ${mention(userId)} 님이 *${pot.title}* 입금 완료를 취소했어요.`,
+  });
 
   await refreshPotMessage(pot);
 });
@@ -568,6 +589,27 @@ async function sendSettlementDms(
   return { sent, failed };
 }
 
+/** 이 팟의 1인당 금액. 여러 곳에서 같은 계산을 하고 있어서 한 곳으로 모았습니다. */
+function perPersonOf(pot: Pot): number {
+  return amountPerPerson(pot.total_amount ?? 0, getParticipants(pot.id).length);
+}
+
+/**
+ * 한 사람이 받은 정산 DM을 현재 입금 상태에 맞춰 다시 그립니다.
+ * (입금했어요 ↔ 잘못 눌렀어요 를 오갈 때마다 이 DM의 버튼이 바뀝니다)
+ */
+async function refreshSettlementDm(pot: Pot, slackUserId: string, paid: boolean): Promise<void> {
+  const me = getParticipants(pot.id).find((p) => p.slack_user_id === slackUserId);
+  if (!me?.dm_channel_id || !me.dm_ts) return; // DM을 못 받은 사람이면 고칠 것도 없습니다.
+
+  await client.chat.update({
+    channel: me.dm_channel_id,
+    ts: me.dm_ts,
+    text: paid ? `✅ ${pot.title} 입금 완료` : `💸 ${pot.title} 정산 안내`,
+    blocks: settlementDm(pot, perPersonOf(pot), paid),
+  });
+}
+
 /** DM을 못 받은 사람이 있으면 파티장에게 알리고, 무엇을 하면 되는지 일러줍니다. */
 async function reportDmFailures(pot: Pot, failed: string[]): Promise<void> {
   if (failed.length === 0) return;
@@ -601,6 +643,75 @@ app.action(ACTION.FINISH, async ({ ack, body, action }) => {
 
   await refreshPotMessage(result.value);
   await announceSettled(result.value);
+});
+
+/** 🔄 정산 다시 열기 — 잘못 끝난 정산을 3단계로 되돌립니다. */
+app.action(ACTION.REOPEN, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = reopenSettlement(potId, userId);
+  if (!result.ok) {
+    await replyToClick(body, result.error);
+    return;
+  }
+
+  const pot = result.value;
+  await refreshPotMessage(pot);
+  await client.chat.postMessage({
+    channel: pot.channel_id,
+    thread_ts: pot.message_ts ?? undefined,
+    text: `🔄 *${pot.title}* 정산을 다시 열었어요. 입금 확인이 끝나면 다시 마무리해 주세요.`,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 취소 (4단계 흐름 바깥)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 🚫 팟 취소 — 정산이 끝나기 전까지 파티장이 언제든 접을 수 있습니다. */
+app.action(ACTION.CANCEL, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  // 취소를 알리려면 참여자 명단이 필요한데, 취소하고 나면 그대로지만
+  // 순서를 명확히 하려고 미리 받아둡니다.
+  const before = getPot(potId);
+  const participants = before ? getParticipants(potId) : [];
+
+  const result = cancelPot(potId, userId);
+  if (!result.ok) {
+    await replyToClick(body, result.error);
+    return;
+  }
+
+  const pot = result.value;
+  await refreshPotMessage(pot);
+  await client.chat.postMessage({
+    channel: pot.channel_id,
+    thread_ts: pot.message_ts ?? undefined,
+    text: `🚫 *${pot.title}* 팟이 취소됐어요.`,
+  });
+
+  // 정산 중이었다면 이미 계좌 DM을 받은 사람들이 있습니다.
+  // 그분들에게는 "안 보내도 된다"고 따로 알려야 합니다.
+  if (before?.status === POT_STATUS.SETTLING) {
+    for (const participant of participants) {
+      if (participant.slack_user_id === pot.organizer_id) continue;
+      if (!participant.dm_ts) continue; // DM을 못 받은 사람은 알릴 것도 없습니다.
+
+      try {
+        await client.chat.postMessage({
+          channel: participant.slack_user_id,
+          text: `🚫 *${pot.title}* 정산이 취소됐어요. 아직 입금 전이라면 보내지 않으셔도 됩니다.`,
+        });
+      } catch (error) {
+        console.error(`취소 알림 발송 실패 (${participant.slack_user_id}):`, error);
+      }
+    }
+  }
 });
 
 /** 정산이 끝났음을 채널 스레드에 알립니다. */

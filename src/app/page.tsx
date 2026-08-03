@@ -139,6 +139,16 @@ function PotCard({ pot, participants }: { pot: Pot; participants: Participant[] 
 function StatusTracker({ status }: { status: PotStatus }) {
   const current = statusStep(status);
 
+  // 취소된 팟은 4단계 흐름 밖이라 막대 대신 한 줄로 표시합니다.
+  // (막대를 그리면 "0단계에 멈춘 팟"처럼 보여서 오해를 부릅니다)
+  if (current === 0) {
+    return (
+      <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+        진행이 중단된 팟이에요
+      </p>
+    );
+  }
+
   return (
     <ol className="mt-4 flex gap-1.5">
       {STATUS_ORDER.map((s, index) => {
@@ -172,6 +182,8 @@ function StatusBadge({ status }: { status: PotStatus }) {
     CLOSED: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
     SETTLING: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
     SETTLED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+    // 취소됨은 눈에 덜 띄게 회색으로 둡니다. 진행 중인 팟을 가리지 않도록요.
+    CANCELLED: "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
   };
 
   return (
