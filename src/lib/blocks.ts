@@ -35,6 +35,35 @@ export const VIEW = {
 } as const;
 
 /**
+ * 모달 입력칸의 이름표(block_id).
+ *
+ * 모달을 만들 때와 제출값을 읽을 때 **같은 상수**를 씁니다.
+ * 예전에는 양쪽에 'title' 처럼 문자열을 각각 적어서, 한쪽을 고치면 다른 쪽이
+ * 조용히 어긋났습니다. 이제 오타를 내면 그런 상수가 없어서 바로 오류가 납니다.
+ */
+export const FIELD = {
+  TITLE: 'title',
+  PLACE: 'place',
+  MEET_AT: 'meet_at',
+  CAPACITY: 'capacity',
+  TOTAL_AMOUNT: 'total_amount',
+  REMEMBER_ACCOUNT: 'remember_account',
+  BANK_NAME: 'bank_name',
+  ACCOUNT_NUMBER: 'account_number',
+  ACCOUNT_HOLDER: 'account_holder',
+} as const;
+
+/** FIELD 의 값들만 모은 타입. 이 목록에 없는 이름은 쓸 수 없습니다. */
+export type FieldId = (typeof FIELD)[keyof typeof FIELD];
+
+/** 계좌 입력 3칸. 함께 다루는 일이 많아 묶어둡니다. */
+export const ACCOUNT_FIELDS = [
+  FIELD.BANK_NAME,
+  FIELD.ACCOUNT_NUMBER,
+  FIELD.ACCOUNT_HOLDER,
+] as const;
+
+/**
  * 모일 수 있는 장소. 여기 적힌 값만 고를 수 있습니다.
  * 층이 늘어나면 이 배열에만 추가하면 모달에 자동으로 반영됩니다.
  */
@@ -314,7 +343,7 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
     blocks: [
       {
         type: 'input',
-        block_id: 'title',
+        block_id: FIELD.TITLE,
         label: { type: 'plain_text', text: '뭐 먹나요?' },
         element: {
           type: 'plain_text_input',
@@ -325,7 +354,7 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
       // 장소: 직접 입력이 아니라 정해진 두 곳 중에서만 고릅니다.
       {
         type: 'input',
-        block_id: 'place',
+        block_id: FIELD.PLACE,
         label: { type: 'plain_text', text: '어디서 모이나요?' },
         element: {
           type: 'static_select',
@@ -340,7 +369,7 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
       // 시간: 장소와 완전히 별개 칸입니다. 시간만 적습니다.
       {
         type: 'input',
-        block_id: 'meet_at',
+        block_id: FIELD.MEET_AT,
         optional: true,
         label: { type: 'plain_text', text: '몇 시에 모이나요?' },
         element: {
@@ -351,7 +380,7 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
       },
       {
         type: 'input',
-        block_id: 'capacity',
+        block_id: FIELD.CAPACITY,
         optional: true,
         label: { type: 'plain_text', text: '정원 (비우면 무제한)' },
         element: {
@@ -392,7 +421,7 @@ export function startSettlementModal(pot: Pot, fallback: Account | null): View {
       section(`*${pot.title}*\n총 금액을 입력하면 참여자 전원에게 계좌 DM이 갑니다.`),
       {
         type: 'input',
-        block_id: 'total_amount',
+        block_id: FIELD.TOTAL_AMOUNT,
         label: { type: 'plain_text', text: '총 결제 금액 (원)' },
         element: {
           type: 'number_input',
@@ -411,7 +440,7 @@ export function startSettlementModal(pot: Pot, fallback: Account | null): View {
       // 갱신되는 게 자연스럽기 때문입니다.
       {
         type: 'input',
-        block_id: 'remember_account',
+        block_id: FIELD.REMEMBER_ACCOUNT,
         optional: true,
         label: { type: 'plain_text', text: ' ' }, // 라벨 없이 체크박스만 보이게
         element: {
@@ -461,7 +490,7 @@ function accountInputs(
     context(`*${heading}*`),
     {
       type: 'input',
-      block_id: 'bank_name',
+      block_id: FIELD.BANK_NAME,
       optional,
       label: { type: 'plain_text', text: '은행' },
       element: {
@@ -473,7 +502,7 @@ function accountInputs(
     },
     {
       type: 'input',
-      block_id: 'account_number',
+      block_id: FIELD.ACCOUNT_NUMBER,
       optional,
       label: { type: 'plain_text', text: '계좌번호' },
       element: {
@@ -485,7 +514,7 @@ function accountInputs(
     },
     {
       type: 'input',
-      block_id: 'account_holder',
+      block_id: FIELD.ACCOUNT_HOLDER,
       optional,
       label: { type: 'plain_text', text: '예금주' },
       element: {

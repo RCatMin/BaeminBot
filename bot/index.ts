@@ -14,11 +14,15 @@
  */
 
 import { App } from '@slack/bolt';
+import type { ViewOutput } from '@slack/bolt';
 
 import {
+  ACCOUNT_FIELDS,
   ACTION,
+  FIELD,
   VIEW,
   createPotModal,
+  type FieldId,
   mention,
   potMessage,
   saveAccountModal,
@@ -222,37 +226,33 @@ async function replyToClick(body: ClickBody, text: string): Promise<void> {
 
 /**
  * 모달이 제출될 때 슬랙이 보내주는 입력값 뭉치.
+ *
+ * Bolt가 이미 정확한 타입(ViewStateValue)을 주므로 그대로 씁니다.
+ * 예전에는 `as never` 로 타입 검사를 꺼뒀는데, 그러면 아래 field() 에
+ * 아무 문자열이나 넣어도 통과해서 칸 이름 오타를 실행해봐야 알 수 있었습니다.
+ *
  * 칸 종류에 따라 값이 담기는 위치가 다릅니다.
  *   - 글자·숫자 입력칸 → value
  *   - 드롭다운(장소 선택) → selected_option.value
+ *   - 체크박스 → selected_options 배열
  */
-type ModalValues = Record<
-  string,
-  Record<
-    string,
-    {
-      value?: string | null;
-      selected_option?: { value?: string } | null;
-      selected_options?: { value?: string }[] | null; // 체크박스는 고른 것들이 배열로 옵니다
-    }
-  >
->;
+type ModalValues = ViewOutput['state']['values'];
 
-/** 체크박스가 켜져 있는지 확인합니다. 안 켰으면 빈 배열이 옵니다. */
-function isChecked(values: ModalValues, blockId: string): boolean {
+/**
+ * 체크박스가 켜져 있는지 확인합니다. 안 켰으면 빈 배열이 옵니다.
+ * blockId 는 FieldId 라서 목록에 없는 이름을 넣으면 컴파일 단계에서 걸립니다.
+ */
+function isChecked(values: ModalValues, blockId: FieldId): boolean {
   return (values[blockId]?.value?.selected_options?.length ?? 0) > 0;
 }
 
 /** 모달에서 입력한 값을 꺼냅니다. 비어 있으면 null. */
-function field(values: ModalValues, blockId: string): string | null {
+function field(values: ModalValues, blockId: FieldId): string | null {
   const input = values[blockId]?.value; // action_id 는 모든 칸에서 'value' 로 통일해뒀습니다.
   const raw = input?.value ?? input?.selected_option?.value;
   const trimmed = raw?.trim();
   return trimmed ? trimmed : null;
 }
-
-/** 계좌 입력 3칸의 block_id. 여러 곳에서 함께 다뤄서 한 곳에 모아둡니다. */
-const ACCOUNT_FIELDS = ['bank_name', 'account_number', 'account_holder'] as const;
 
 /**
  * 계좌 3칸 중 "일부만" 채웠는지 확인합니다.
@@ -268,9 +268,9 @@ function isPartialAccount(values: ModalValues): boolean {
 
 /** 모달에서 은행/계좌번호/예금주 3칸을 한 번에 꺼냅니다. 하나라도 비면 null. */
 function accountFromView(values: ModalValues): Account | null {
-  const bank_name = field(values, 'bank_name');
-  const account_number = field(values, 'account_number');
-  const account_holder = field(values, 'account_holder');
+  const bank_name = field(values, FIELD.BANK_NAME);
+  const account_number = field(values, FIELD.ACCOUNT_NUMBER);
+  const account_holder = field(values, FIELD.ACCOUNT_HOLDER);
   if (!bank_name || !account_number || !account_holder) return null;
   return { bank_name, account_number, account_holder };
 }
@@ -296,12 +296,12 @@ for (const commandName of LUNCH_COMMANDS) {
 
 /** 모달에서 "모집 시작"을 누른 순간. 팟을 만들고 채널에 메시지를 올립니다. */
 app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
-  const values = view.state.values as never;
-  const title = field(values, 'title');
+  const values = view.state.values;
+  const title = field(values, FIELD.TITLE);
 
   if (!title) {
     // ack에 errors를 담으면 모달이 닫히지 않고 그 칸에 빨간 글씨가 뜹니다.
-    await ack({ response_action: 'errors', errors: { title: '뭘 먹을지 적어주세요.' } });
+    await ack({ response_action: 'errors', errors: { [FIELD.TITLE]: '뭘 먹을지 적어주세요.' } });
     return;
   }
 
@@ -310,7 +310,7 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
     await ack({
       response_action: 'errors',
       errors: {
-        account_holder: '계좌를 적으시려면 은행 · 계좌번호 · 예금주를 모두 채워주세요. (전부 비워두셔도 됩니다)',
+        [FIELD.ACCOUNT_HOLDER]: '계좌를 적으시려면 은행 · 계좌번호 · 예금주를 모두 채워주세요. (전부 비워두셔도 됩니다)',
       },
     });
     return;
@@ -320,7 +320,7 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
 
   const channelId = view.private_metadata; // 모달을 연 채널을 기억해뒀던 값
   const userId = body.user.id;
-  const capacityRaw = field(values, 'capacity');
+  const capacityRaw = field(values, FIELD.CAPACITY);
 
   await rememberWhoThisIs(userId); // 대시보드에 ID 대신 이름이 보이도록
 
@@ -328,8 +328,8 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
     channelId,
     organizerId: userId,
     title,
-    place: field(values, 'place'),
-    meetAt: field(values, 'meet_at'),
+    place: field(values, FIELD.PLACE),
+    meetAt: field(values, FIELD.MEET_AT),
     capacity: capacityRaw ? Number(capacityRaw) : 0,
     account: accountFromView(values),
   });
@@ -450,24 +450,24 @@ app.action(ACTION.OPEN_SETTLE_MODAL, async ({ ack, body, action, client }) => {
  * 이 프로젝트에서 가장 중요한 부분입니다.
  */
 app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
-  const values = view.state.values as never;
+  const values = view.state.values;
   const potId = Number(view.private_metadata);
   const userId = body.user.id;
 
-  const totalAmount = Number(field(values, 'total_amount') ?? '0');
+  const totalAmount = Number(field(values, FIELD.TOTAL_AMOUNT) ?? '0');
   const account = accountFromView(values);
 
   if (!account) {
     await ack({
       response_action: 'errors',
-      errors: { account_number: '은행 · 계좌번호 · 예금주를 모두 입력해 주세요.' },
+      errors: { [FIELD.ACCOUNT_NUMBER]: '은행 · 계좌번호 · 예금주를 모두 입력해 주세요.' },
     });
     return;
   }
 
   const result = startSettlement(potId, userId, totalAmount, account);
   if (!result.ok) {
-    await ack({ response_action: 'errors', errors: { total_amount: result.error } });
+    await ack({ response_action: 'errors', errors: { [FIELD.TOTAL_AMOUNT]: result.error } });
     return;
   }
   await ack();
@@ -479,7 +479,7 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
   // 계좌 저장은 체크했을 때만 합니다.
   // 예전에는 묻지도 않고 저장해서, 이번 정산에만 쓰려던 계좌가 다음 팟에 자동으로
   // 채워졌습니다. 편하긴 해도 동의한 적 없는 저장이라 체크박스로 바꿨습니다.
-  if (isChecked(values, 'remember_account')) {
+  if (isChecked(values, FIELD.REMEMBER_ACCOUNT)) {
     saveAccount(userId, null, account);
   }
 
@@ -805,13 +805,13 @@ for (const commandName of ACCOUNT_COMMANDS) {
 }
 
 app.view(VIEW.SAVE_ACCOUNT, async ({ ack, body, view, client }) => {
-  const values = view.state.values as never;
+  const values = view.state.values;
   const account = accountFromView(values);
 
   if (!account) {
     await ack({
       response_action: 'errors',
-      errors: { account_number: '세 칸을 모두 채워주세요.' },
+      errors: { [FIELD.ACCOUNT_NUMBER]: '세 칸을 모두 채워주세요.' },
     });
     return;
   }
