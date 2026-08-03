@@ -8,7 +8,7 @@
 
 import type { KnownBlock, View } from '@slack/types';
 import { POT_STATUS, STATUS_EMOJI, STATUS_LABEL, STATUS_ORDER, type PotStatus } from './status.ts';
-import { amountPerPerson, formatWon, type Account, type Participant, type Pot } from './pots.ts';
+import { formatWon, splitBill, type Account, type Participant, type Pot } from './pots.ts';
 
 /**
  * 버튼과 모달을 구분하는 이름표들.
@@ -110,13 +110,24 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
 
   // 3단계·4단계에서는 금액과 입금 현황을 함께 보여줍니다.
   if (pot.total_amount) {
-    const perPerson = amountPerPerson(pot.total_amount, participants.length);
+    const split = splitBill(pot.total_amount, participants.length);
     blocks.push({ type: 'divider' });
-    blocks.push(
-      section(
-        `*총 금액* ${formatWon(pot.total_amount)}원\n*1인당* ${formatWon(perPerson)}원 (${participants.length}명)`,
-      ),
-    );
+
+    // 걷는 금액과 파티장 몫을 따로 적습니다.
+    // "1인당 23,010원 × 4명"만 보여주면 총액과 안 맞아 보이는데,
+    // 파티장은 자기한테 송금하지 않기 때문입니다.
+    const lines = [`*총 금액* ${formatWon(pot.total_amount)}원`];
+
+    if (split.payerCount > 0) {
+      lines.push(
+        `*보낼 금액* 1인당 ${formatWon(split.perPerson)}원 × ${split.payerCount}명 = ${formatWon(split.collected)}원`,
+      );
+      lines.push(`*파티장 몫* ${formatWon(split.organizerShare)}원`);
+    } else {
+      lines.push('_참여자가 파티장뿐이라 걷을 금액이 없어요._');
+    }
+
+    blocks.push(section(lines.join('\n')));
     blocks.push(section(`*입금 현황*\n${paymentStatusList(pot, participants)}`));
   }
 

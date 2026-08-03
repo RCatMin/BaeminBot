@@ -11,7 +11,7 @@ import { connection } from "next/server";
 import { AutoRefresh } from "./auto-refresh.tsx";
 
 import {
-  amountPerPerson,
+  splitBill,
   formatWon,
   getParticipants,
   getUserNames,
@@ -95,9 +95,8 @@ function PotCard({
   participants: Participant[];
   names: Map<string, string>;
 }) {
-  const perPerson = pot.total_amount
-    ? amountPerPerson(pot.total_amount, participants.length)
-    : null;
+  // 파티장은 자기한테 송금하지 않으므로, 걷는 금액과 파티장 몫을 나눠서 봅니다.
+  const split = pot.total_amount ? splitBill(pot.total_amount, participants.length) : null;
   const payers = participants.filter((p) => p.slack_user_id !== pot.organizer_id);
   const paidCount = payers.filter((p) => p.paid === 1).length;
 
@@ -127,9 +126,20 @@ function PotCard({
         <Stat label="총 금액">
           {pot.total_amount ? `${formatWon(pot.total_amount)}원` : "—"}
         </Stat>
-        <Stat label="1인당">{perPerson ? `${formatWon(perPerson)}원` : "—"}</Stat>
+        {/* 보낼 사람이 없으면(파티장뿐) 1인당 금액은 의미가 없어서 — 로 둡니다. */}
+        <Stat label="1인당 보낼 금액">
+          {split && split.payerCount > 0 ? `${formatWon(split.perPerson)}원` : "—"}
+        </Stat>
         <Stat label="입금">{pot.total_amount ? `${paidCount} / ${payers.length}명` : "—"}</Stat>
       </dl>
+
+      {/* 총액이 어떻게 나뉘는지. 파티장 몫을 밝혀야 숫자가 맞아 보입니다. */}
+      {split && split.payerCount > 0 && (
+        <p className="mt-3 text-xs text-slate-400 tabular-nums dark:text-slate-500">
+          {formatWon(split.perPerson)}원 × {split.payerCount}명 ={" "}
+          {formatWon(split.collected)}원 걷고, 파티장이 {formatWon(split.organizerShare)}원 부담
+        </p>
+      )}
 
       {/* 정산이 시작된 뒤에만 누가 입금했는지 보여줍니다. */}
       {pot.total_amount !== null && payers.length > 0 && (

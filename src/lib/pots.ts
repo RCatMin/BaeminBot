@@ -468,12 +468,45 @@ function touch(potId: number): void {
 
 /**
  * 1인당 낼 금액을 계산합니다.
- * 파티장을 뺀 나머지 인원이 N명이면, 총 금액을 (N+1)로 나눕니다. (파티장 몫도 포함)
- * 10원 단위로 올림해서 "1원 남는" 상황을 피합니다.
+ * 참여 인원 전체(파티장 포함)로 나눈 뒤, 10원 단위로 올립니다.
+ * 송금할 때 1원 단위가 남지 않게 하려는 것입니다.
  */
 export function amountPerPerson(totalAmount: number, headcount: number): number {
   if (headcount <= 0) return 0;
   return Math.ceil(totalAmount / headcount / 10) * 10;
+}
+
+/** 정산 금액이 실제로 어떻게 나뉘는지. */
+export type BillSplit = {
+  /** 참여자 한 명이 파티장에게 보낼 금액 */
+  perPerson: number;
+  /** 실제로 돈을 보내는 사람 수 (파티장 제외) */
+  payerCount: number;
+  /** 파티장이 받게 되는 총액 */
+  collected: number;
+  /** 파티장이 최종적으로 부담하는 금액 (총액 - 걷은 돈) */
+  organizerShare: number;
+};
+
+/**
+ * 총 금액이 실제로 어떻게 나뉘는지 계산합니다.
+ *
+ * 왜 필요한가: "1인당 23,010원 (4명)"만 보여주면 곱해서 92,040원이 되는데
+ * 총액은 92,010원이라 안 맞아 보입니다. 파티장은 자기한테 송금하지 않으므로
+ * 실제로는 3명만 보내고 나머지는 파티장이 부담합니다. 그 구조를 그대로 보여주려고
+ * 걷는 금액과 파티장 몫을 따로 계산합니다.
+ */
+export function splitBill(totalAmount: number, headcount: number): BillSplit {
+  const perPerson = amountPerPerson(totalAmount, headcount);
+  const payerCount = Math.max(0, headcount - 1); // 파티장 한 명을 뺍니다
+  const collected = perPerson * payerCount;
+
+  return {
+    perPerson,
+    payerCount,
+    collected,
+    organizerShare: totalAmount - collected,
+  };
 }
 
 /** 12345 → "12,345" */
