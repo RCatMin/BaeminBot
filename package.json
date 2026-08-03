@@ -12,7 +12,8 @@
     "doctor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/doctor.ts",
     "seed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test"
   },
   "dependencies": {
     "@slack/bolt": "^5.0.0",
