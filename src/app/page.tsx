@@ -14,6 +14,7 @@ import {
   amountPerPerson,
   formatWon,
   getParticipants,
+  getUserNames,
   listPots,
   type Participant,
   type Pot,
@@ -57,6 +58,8 @@ async function PotList() {
   await connection();
 
   const pots = listPots();
+  // 이름은 한 번에 다 읽어 옵니다. 팟마다 조회하면 같은 질의를 몇 번씩 반복하게 됩니다.
+  const names = getUserNames();
 
   if (pots.length === 0) {
     return (
@@ -72,13 +75,26 @@ async function PotList() {
   return (
     <ul className="space-y-4">
       {pots.map((pot) => (
-        <PotCard key={pot.id} pot={pot} participants={getParticipants(pot.id)} />
+        <PotCard
+          key={pot.id}
+          pot={pot}
+          participants={getParticipants(pot.id)}
+          names={names}
+        />
       ))}
     </ul>
   );
 }
 
-function PotCard({ pot, participants }: { pot: Pot; participants: Participant[] }) {
+function PotCard({
+  pot,
+  participants,
+  names,
+}: {
+  pot: Pot;
+  participants: Participant[];
+  names: Map<string, string>;
+}) {
   const perPerson = pot.total_amount
     ? amountPerPerson(pot.total_amount, participants.length)
     : null;
@@ -96,6 +112,7 @@ function PotCard({ pot, participants }: { pot: Pot; participants: Participant[] 
           <p className="mt-1 flex flex-wrap gap-x-3 text-sm text-slate-500 dark:text-slate-400">
             <span>📍 {pot.place ?? "미정"}</span>
             <span>🕐 {pot.meet_at ?? "미정"}</span>
+            <span>👤 {names.get(pot.organizer_id) ?? pot.organizer_id}</span>
           </p>
         </div>
         <StatusBadge status={pot.status} />
@@ -126,7 +143,8 @@ function PotCard({ pot, participants }: { pot: Pot; participants: Participant[] 
                   : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
               }`}
             >
-              {p.paid === 1 ? "✅" : "⬜"} {p.slack_user_id}
+              {/* 이름을 아직 못 알아낸 사람은 원래 ID로 보여줍니다. */}
+              {p.paid === 1 ? "✅" : "⬜"} {names.get(p.slack_user_id) ?? p.slack_user_id}
             </li>
           ))}
         </ul>

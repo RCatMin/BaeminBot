@@ -80,7 +80,9 @@ export function saveAccount(
       `INSERT INTO users (slack_user_id, display_name, bank_name, account_number, account_holder, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(slack_user_id) DO UPDATE SET
-         display_name   = excluded.display_name,
+         -- COALESCE 를 쓰는 이유: 정산 시작 때 계좌만 저장하면서 이름을 null 로
+         -- 넘기는 자리가 있는데, 그대로 덮어쓰면 알아둔 이름이 지워집니다.
+         display_name   = COALESCE(excluded.display_name, users.display_name),
          bank_name      = excluded.bank_name,
          account_number = excluded.account_number,
          account_holder = excluded.account_holder,
@@ -94,6 +96,54 @@ export function saveAccount(
       account.account_holder,
       now(),
     );
+}
+
+// ── 사용자 이름 ─────────────────────────────────────────────────────────────
+
+/**
+ * 슬랙 사용자의 표시 이름을 기억해둡니다.
+ *
+ * 대시보드가 슬랙에 직접 물어보게 하면 화면을 그릴 때마다 네트워크를 타야 합니다.
+ * 대신 봇이 사람을 마주칠 때마다 여기에 적어두고, 대시보드는 읽기만 합니다.
+ */
+export function rememberUserName(slackUserId: string, displayName: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO users (slack_user_id, display_name, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(slack_user_id) DO UPDATE SET
+         display_name = excluded.display_name,
+         updated_at   = excluded.updated_at`,
+    )
+    .run(slackUserId, displayName, now());
+}
+
+/** 알고 있는 이름을 전부 가져옵니다. 대시보드가 한 번에 읽어 쓰는 용도입니다. */
+export function getUserNames(): Map<string, string> {
+  const rows = getDb()
+    .prepare(`SELECT slack_user_id, display_name FROM users WHERE display_name IS NOT NULL`)
+    .all() as unknown as { slack_user_id: string; display_name: string }[];
+
+  return new Map(rows.map((r) => [r.slack_user_id, r.display_name]));
+}
+
+/**
+ * 아직 이름을 모르는 사용자 ID 목록.
+ * 봇이 시작할 때 이걸 보고 슬랙에 이름을 물어봅니다. (예전 기록까지 채우려고)
+ */
+export function listUnnamedUserIds(): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT id FROM (
+         SELECT slack_user_id AS id FROM participants
+         UNION
+         SELECT organizer_id AS id FROM pots
+       )
+       WHERE id NOT IN (SELECT slack_user_id FROM users WHERE display_name IS NOT NULL)`,
+    )
+    .all() as unknown as { id: string }[];
+
+  return rows.map((r) => r.id);
 }
 
 // ── 팟 조회 ─────────────────────────────────────────────────────────────────

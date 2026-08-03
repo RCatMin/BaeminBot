@@ -36,9 +36,12 @@ import {
   getAccount,
   getParticipants,
   getPot,
+  getUserNames,
   joinPot,
   leavePot,
+  listUnnamedUserIds,
   markPaid,
+  rememberUserName,
   reopenSettlement,
   saveAccount,
   setDmRef,
@@ -143,6 +146,49 @@ async function refreshPotMessage(pot: Pot): Promise<void> {
     text: `${STATUS_LABEL[pot.status]} · ${pot.title}`, // 알림 목록에 뜨는 짧은 요약
     blocks: potMessage(pot, participants),
   });
+}
+
+/**
+ * 이 사람의 이름을 슬랙에 물어봐서 DB에 적어둡니다.
+ *
+ * 대시보드가 U0BLK... 같은 ID 대신 사람 이름을 보여주기 위한 것입니다.
+ * 이미 알고 있으면 슬랙에 묻지 않습니다. 실패해도 그냥 넘어갑니다 —
+ * 이름을 못 알아낸다고 팟 참여가 막히면 안 되니까요.
+ */
+async function rememberWhoThisIs(slackUserId: string): Promise<void> {
+  if (getUserNames().has(slackUserId)) return;
+
+  try {
+    const info = await client.users.info({ user: slackUserId });
+    const p = info.user?.profile;
+    // 슬랙에는 이름 칸이 여러 개라, 사람이 알아보기 쉬운 순서로 고릅니다.
+    const name = p?.display_name || p?.real_name || info.user?.real_name || info.user?.name;
+    if (name) rememberUserName(slackUserId, name);
+  } catch (error) {
+    // 없는 사용자(user_not_found)는 흔한 일입니다 — 샘플 데이터의 가짜 ID가 대표적입니다.
+    // 스택 추적까지 찍으면 시작할 때마다 화면이 지저분해져서 한 줄로만 남깁니다.
+    const reason = (error as { data?: { error?: string } })?.data?.error ?? String(error);
+    console.error(`   이름 조회 실패 (${slackUserId}): ${reason}`);
+  }
+}
+
+/**
+ * 아직 이름을 모르는 사람들의 이름을 한 번에 채웁니다. 봇이 켜질 때 실행합니다.
+ * 이렇게 해야 예전에 만들어진 팟의 참여자들도 대시보드에서 이름으로 보입니다.
+ */
+async function syncUserNames(): Promise<void> {
+  const unknown = listUnnamedUserIds();
+  if (unknown.length === 0) return;
+
+  let filled = 0;
+  for (const id of unknown) {
+    const before = getUserNames().size;
+    await rememberWhoThisIs(id);
+    if (getUserNames().size > before) filled += 1;
+  }
+
+  // 샘플 데이터(U_MINSU 등)는 실제 슬랙 사용자가 아니라 조회에 실패합니다. 정상입니다.
+  console.log(`   사용자 이름 ${filled}/${unknown.length}명 확인`);
 }
 
 /** 버튼 클릭 정보에서 우리가 실제로 쓰는 부분만 추린 모양. */
@@ -263,6 +309,8 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
   const userId = body.user.id;
   const capacityRaw = field(values, 'capacity');
 
+  await rememberWhoThisIs(userId); // 대시보드에 ID 대신 이름이 보이도록
+
   const pot = createPot({
     channelId,
     organizerId: userId,
@@ -312,6 +360,8 @@ app.action(ACTION.JOIN, async ({ ack, body, action }) => {
     await replyToClick(body, result.error);
     return;
   }
+
+  await rememberWhoThisIs(userId); // 대시보드에 ID 대신 이름이 보이도록
   await refreshPotMessage(result.value);
 });
 
@@ -781,4 +831,8 @@ try {
 
 // 어떤 커맨드를 받는지 찍어둡니다. 슬랙에 등록한 이름이 여기 없으면 반응이 없습니다.
 console.log(`   받는 커맨드: ${[...LUNCH_COMMANDS, ...ACCOUNT_COMMANDS].join(' ')}`);
+
+// 예전 팟의 참여자 이름까지 채워둡니다. (대시보드에서 ID 대신 이름으로 보이도록)
+await syncUserNames();
+
 console.log('   종료는 Ctrl+C');
