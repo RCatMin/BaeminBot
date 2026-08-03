@@ -403,6 +403,36 @@ export function reopenSettlement(potId: number, actorId: string): Result<Pot> {
   return ok(getPot(potId)!);
 }
 
+// ── 계좌번호 보관 기간 ──────────────────────────────────────────────────────
+
+/**
+ * 끝난 팟(정산 완료 · 취소됨)에서 계좌번호를 지웁니다.
+ *
+ * 왜: 끝난 일의 계좌번호를 계속 들고 있을 이유가 없습니다. DB 파일을 복사하거나
+ * 백업하면 그대로 따라가므로, 안 갖고 있는 게 가장 확실한 보호입니다.
+ * 금액 · 참여자 · 입금 기록은 그대로 두어서 대시보드는 변함이 없습니다.
+ *
+ * graceHours 동안은 건드리지 않습니다. 잘못 끝난 정산을 "🔄 정산 다시 열기"로
+ * 되돌리면 계좌가 다시 필요한데, 곧바로 지우면 그 길이 막히기 때문입니다.
+ *
+ * @returns 지운 팟 개수
+ */
+export function purgeFinishedAccounts(graceHours = 24): number {
+  const cutoff = new Date(Date.now() - graceHours * 60 * 60 * 1000).toISOString();
+
+  const info = getDb()
+    .prepare(
+      `UPDATE pots
+          SET bank_name = NULL, account_number = NULL, account_holder = NULL
+        WHERE status IN (?, ?)
+          AND updated_at < ?
+          AND account_number IS NOT NULL`,
+    )
+    .run(POT_STATUS.SETTLED, POT_STATUS.CANCELLED, cutoff);
+
+  return Number(info.changes);
+}
+
 // ── 취소 (4단계 흐름 바깥) ──────────────────────────────────────────────────
 
 /**

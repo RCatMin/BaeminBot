@@ -394,9 +394,31 @@ export function startSettlementModal(pot: Pot, fallback: Account | null): View {
       // 여기서는 계좌가 반드시 있어야 DM을 보낼 수 있으므로 필수 칸으로 만듭니다.
       // (선택으로 두면 "(옵션)"이라고 적혀 있는데 비우면 오류가 나서 앞뒤가 안 맞습니다.)
       ...accountInputs(prefill, '입금받을 계좌', /* required */ true),
+
+      // 계좌를 저장할지 물어봅니다. 예전에는 묻지도 않고 저장했습니다.
+      // 이미 등록해둔 사람은 기본으로 켜둡니다 — 한 번 동의했고, 계좌를 바꿔 적었다면
+      // 갱신되는 게 자연스럽기 때문입니다.
+      {
+        type: 'input',
+        block_id: 'remember_account',
+        optional: true,
+        label: { type: 'plain_text', text: ' ' }, // 라벨 없이 체크박스만 보이게
+        element: {
+          type: 'checkboxes',
+          action_id: 'value',
+          ...(fallback ? { initial_options: [REMEMBER_ACCOUNT_OPTION] } : {}),
+          options: [REMEMBER_ACCOUNT_OPTION],
+        },
+      },
     ],
   };
 }
+
+/** "다음에도 이 계좌 쓰기" 체크박스의 선택지. 켜둘 때와 목록에 둘 다 써서 상수로 뺍니다. */
+const REMEMBER_ACCOUNT_OPTION = {
+  text: { type: 'plain_text' as const, text: '이 계좌를 저장해서 다음 팟에도 자동으로 채우기' },
+  value: 'remember',
+};
 
 /** /계좌등록 을 치면 뜨는 모달. 한 번 등록하면 다음 팟부터 자동으로 채워집니다. */
 export function saveAccountModal(savedAccount: Account | null): View {

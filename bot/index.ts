@@ -41,6 +41,7 @@ import {
   leavePot,
   listUnnamedUserIds,
   markPaid,
+  purgeFinishedAccounts,
   rememberUserName,
   reopenSettlement,
   saveAccount,
@@ -227,8 +228,20 @@ async function replyToClick(body: ClickBody, text: string): Promise<void> {
  */
 type ModalValues = Record<
   string,
-  Record<string, { value?: string | null; selected_option?: { value?: string } | null }>
+  Record<
+    string,
+    {
+      value?: string | null;
+      selected_option?: { value?: string } | null;
+      selected_options?: { value?: string }[] | null; // 체크박스는 고른 것들이 배열로 옵니다
+    }
+  >
 >;
+
+/** 체크박스가 켜져 있는지 확인합니다. 안 켰으면 빈 배열이 옵니다. */
+function isChecked(values: ModalValues, blockId: string): boolean {
+  return (values[blockId]?.value?.selected_options?.length ?? 0) > 0;
+}
 
 /** 모달에서 입력한 값을 꺼냅니다. 비어 있으면 null. */
 function field(values: ModalValues, blockId: string): string | null {
@@ -463,8 +476,12 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
   const participants = getParticipants(pot.id);
   const perPerson = amountPerPerson(totalAmount, participants.length);
 
-  // 파티장이 계좌를 등록해두지 않았다면, 방금 입력한 계좌를 저장해서 다음에 재사용합니다.
-  if (!getAccount(userId)) saveAccount(userId, null, account);
+  // 계좌 저장은 체크했을 때만 합니다.
+  // 예전에는 묻지도 않고 저장해서, 이번 정산에만 쓰려던 계좌가 다음 팟에 자동으로
+  // 채워졌습니다. 편하긴 해도 동의한 적 없는 저장이라 체크박스로 바꿨습니다.
+  if (isChecked(values, 'remember_account')) {
+    saveAccount(userId, null, account);
+  }
 
   const { sent, failed } = await sendSettlementDms(pot);
 
@@ -834,5 +851,17 @@ console.log(`   받는 커맨드: ${[...LUNCH_COMMANDS, ...ACCOUNT_COMMANDS].joi
 
 // 예전 팟의 참여자 이름까지 채워둡니다. (대시보드에서 ID 대신 이름으로 보이도록)
 await syncUserNames();
+
+/**
+ * 끝난 팟의 계좌번호를 지웁니다. 켤 때 한 번, 이후 6시간마다.
+ * 봇을 며칠씩 켜두면 시작할 때 한 번만으로는 계속 쌓이기 때문입니다.
+ */
+function cleanUpOldAccounts(): void {
+  const purged = purgeFinishedAccounts();
+  if (purged > 0) console.log(`   끝난 팟 ${purged}건에서 계좌번호를 지웠습니다.`);
+}
+
+cleanUpOldAccounts();
+setInterval(cleanUpOldAccounts, 6 * 60 * 60 * 1000);
 
 console.log('   종료는 Ctrl+C');
