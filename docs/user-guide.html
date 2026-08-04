@@ -1,4 +1,15 @@
+<meta charset="utf-8">
 <title>밥머거 사용설명서</title>
+<script>
+  // 화면이 그려지기 전에 먼저 실행돼서, 저장해둔 모드를 깜빡임 없이 바로 반영합니다.
+  (function () {
+    try {
+      var stored = localStorage.getItem('bapmeoggeo-theme');
+      var theme = stored || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root {
     --bg-app: #f2f2f7;
@@ -121,6 +132,19 @@
     align-items: center;
     gap: 16px;
   }
+  .theme-toggle {
+    margin-left: auto;
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 15px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .hero-icon {
     flex-shrink: 0;
     width: 56px; height: 56px;
@@ -190,15 +214,35 @@
   }
   .tracker .seg { flex: 1; }
   .tracker .bar { height: 6px; border-radius: 999px; background: var(--border); }
-  .tracker .bar.done { background: var(--accent); }
   .tracker .seg-label {
     margin-top: 8px;
     font-size: 11.5px;
     color: var(--text-tertiary);
     text-align: center;
   }
-  .tracker .seg.current .bar { background: var(--accent); }
-  .tracker .seg.current .seg-label { color: var(--accent); font-weight: 700; }
+
+  /* 네 칸을 순서대로 은은하게 한 번씩 밝혔다 되돌리며, 흐름이 진행되는 느낌을 줍니다. */
+  @media (prefers-reduced-motion: no-preference) {
+    .tracker .bar { animation: bar-glow 6.4s ease-in-out infinite; }
+    .tracker .seg-label { animation: label-glow 6.4s ease-in-out infinite; }
+    .tracker .seg:nth-child(1) .bar, .tracker .seg:nth-child(1) .seg-label { animation-delay: 0s; }
+    .tracker .seg:nth-child(2) .bar, .tracker .seg:nth-child(2) .seg-label { animation-delay: 1.6s; }
+    .tracker .seg:nth-child(3) .bar, .tracker .seg:nth-child(3) .seg-label { animation-delay: 3.2s; }
+    .tracker .seg:nth-child(4) .bar, .tracker .seg:nth-child(4) .seg-label { animation-delay: 4.8s; }
+  }
+  /* 애니메이션을 줄이길 원하면(prefers-reduced-motion) 첫 칸만 조용히 강조된 상태로 고정합니다. */
+  @media (prefers-reduced-motion: reduce) {
+    .tracker .seg:nth-child(1) .bar { background: var(--accent); }
+    .tracker .seg:nth-child(1) .seg-label { color: var(--accent); font-weight: 700; }
+  }
+  @keyframes bar-glow {
+    0%, 18%, 100% { background: var(--border); }
+    5%, 10% { background: var(--accent); }
+  }
+  @keyframes label-glow {
+    0%, 18%, 100% { color: var(--text-tertiary); font-weight: 400; }
+    5%, 10% { color: var(--accent); font-weight: 700; }
+  }
 
   /* ── 단계 카드 ── */
   .step {
@@ -344,6 +388,7 @@
       <h1>밥머거 사용설명서</h1>
       <p>슬랙에서 점심팟 모집부터 정산까지, 총무 없이도 알아서 굴러가게 해주는 봇이에요.</p>
     </div>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-label="화면 모드 전환"></button>
   </div>
 
   <p class="lede">
@@ -367,10 +412,10 @@
     </p>
 
     <div class="tracker">
-      <div class="seg"><div class="bar done"></div><div class="seg-label">모집중</div></div>
-      <div class="seg"><div class="bar done"></div><div class="seg-label">모집 완료</div></div>
-      <div class="seg"><div class="bar done"></div><div class="seg-label">정산 중</div></div>
-      <div class="seg current"><div class="bar done"></div><div class="seg-label">정산 완료</div></div>
+      <div class="seg"><div class="bar"></div><div class="seg-label">모집중</div></div>
+      <div class="seg"><div class="bar"></div><div class="seg-label">모집 완료</div></div>
+      <div class="seg"><div class="bar"></div><div class="seg-label">정산 중</div></div>
+      <div class="seg"><div class="bar"></div><div class="seg-label">정산 완료</div></div>
     </div>
   </section>
 
@@ -572,3 +617,23 @@
   </footer>
 
 </main>
+
+<script>
+  (function () {
+    var STORAGE_KEY = 'bapmeoggeo-theme';
+    var btn = document.getElementById('themeToggle');
+
+    function paint(theme) {
+      btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    paint(document.documentElement.getAttribute('data-theme'));
+
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem(STORAGE_KEY, next); } catch (e) {}
+      paint(next);
+    });
+  })();
+</script>
