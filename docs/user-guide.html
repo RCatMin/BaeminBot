@@ -91,6 +91,7 @@
   }
 
   * { box-sizing: border-box; }
+  code { font-family: inherit; }
   body {
     margin: 0;
     background: var(--bg-app);
@@ -220,7 +221,6 @@
     border-radius: 6px;
     padding: 2px 6px;
     font-size: 13px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
   }
   .step-note {
     margin-top: 12px;
@@ -300,7 +300,6 @@
     padding: 5px 10px;
     font-size: 13px;
     font-weight: 700;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
     white-space: nowrap;
   }
   .list-row .desc { font-size: 13.5px; color: var(--text-secondary); line-height: 1.55; padding-top: 3px; }
@@ -353,10 +352,9 @@
     막히는 부분이 없을 거예요.
   </p>
 
-  <div class="quick-row">
+  <div class="quick-row" style="grid-template-columns: repeat(2, 1fr);">
     <div class="quick-chip"><div class="emoji">🍚</div><span class="label">팟 모집</span></div>
     <div class="quick-chip"><div class="emoji">💸</div><span class="label">금액별 정산</span></div>
-    <div class="quick-chip"><div class="emoji">📊</div><span class="label">대시보드로 확인</span></div>
   </div>
 
   <!-- ───────────────────────── 전체 흐름 ───────────────────────── -->
@@ -532,31 +530,6 @@
     </div>
   </section>
 
-  <!-- ───────────────────────── 대시보드 ───────────────────────── -->
-  <section>
-    <p class="section-eyebrow">전체 현황이 궁금하면</p>
-    <h2 class="section-title">밥머거 대시보드</h2>
-    <p class="section-desc">
-      슬랙 밖에서 지금까지의 모든 팟과 정산 현황을 한눈에 볼 수 있는 화면이에요. 버튼을 누르는
-      곳은 아니고, 보기만 하는 화면입니다 — 상태를 바꾸려면 슬랙에서 조작해야 해요.
-    </p>
-    <div class="card group-list" style="margin-top: 16px;">
-      <div class="list-row">
-        <span class="chip">📅</span>
-        <span class="desc"><strong>날짜별로 보기.</strong> 달력에서 원하는 날짜를 고르면 그날 있었던 팟만 볼 수 있어요.</span>
-      </div>
-      <div class="list-row">
-        <span class="chip">🌗</span>
-        <span class="desc"><strong>라이트/다크 모드.</strong> 오른쪽 위 동그란 버튼으로 화면 밝기를 직접 고를 수 있어요.</span>
-      </div>
-      <div class="list-row">
-        <span class="chip">🔄</span>
-        <span class="desc"><strong>자동 갱신.</strong> 30초마다 저절로 새로고침돼서, 계속 눌러볼 필요 없어요.</span>
-      </div>
-    </div>
-    <p class="section-desc" style="margin-top: 14px;">대시보드 주소는 봇 관리자에게 물어보세요.</p>
-  </section>
-
   <!-- ───────────────────────── FAQ ───────────────────────── -->
   <section>
     <p class="section-eyebrow">궁금할 만한 것들</p>
@@ -589,7 +562,7 @@
       <details class="faq-item">
         <summary class="faq-q">버튼을 눌렀는데 아무 반응이 없어요.<span class="chev">▾</span></summary>
         <div class="faq-a">봇이 잠깐 꺼져 있을 수 있어요. 잠시 후 다시 눌러보시고, 계속 그러면
-          봇을 관리하는 사람에게 알려주세요.</div>
+          <strong>@[1기/개발] 이민수</strong>에게 DM 해주세요.</div>
       </details>
     </div>
   </section>
