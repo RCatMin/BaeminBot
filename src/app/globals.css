@@ -35,6 +35,37 @@
   }
 }
 
+/*
+ * 우측 상단 토글로 직접 고른 값. 속성 선택자(:root[data-theme])는 위
+ * @media 블록의 :root 보다 우선순위가 높아서, OS 설정과 반대로 골라도
+ * 그대로 이깁니다. (예: OS는 라이트인데 사용자가 다크를 고른 경우)
+ */
+:root[data-theme="dark"] {
+  --bg-app: #000000;
+  --bg-card: #1c1c1e;
+  --text-primary: #f2f2f7;
+  --text-secondary: #98989d;
+  --text-tertiary: #636366;
+  --border: #38383a;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 8px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg-app: #f2f2f7;
+  --bg-card: #ffffff;
+  --text-primary: #1c1c1e;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #aeaeb2;
+  --border: #e5e5ea;
+  --accent: #007aff;
+  --accent-soft: #e8f1ff;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 8px rgba(0, 0, 0, 0.03);
+  color-scheme: light;
+}
+
 @theme inline {
   --color-app: var(--bg-app);
   --color-card: var(--bg-card);

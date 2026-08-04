@@ -14,6 +14,7 @@ import { connection } from "next/server";
 
 import { AutoRefresh } from "./auto-refresh.tsx";
 import { DateFilter } from "./date-filter.tsx";
+import { ThemeToggle } from "./theme-toggle.tsx";
 
 import {
   formatWon,
@@ -49,19 +50,19 @@ export default async function Page({ searchParams }: PageProps) {
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-card text-lg shadow-[var(--shadow-card)]">
             🍚
           </span>
-          <h1 className="text-[22px] font-semibold tracking-tight">점심팟 대시보드</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">밥머거 대시보드</h1>
         </div>
         <p className="mt-2 text-[13px] leading-relaxed text-secondary">
           슬랙에서{" "}
           <code className="rounded-md bg-card px-1.5 py-0.5 text-[12px] text-primary">
-            /점심팟
+            /밥먹자
           </code>{" "}
           으로 만든 팟의 모집 · 정산 현황
         </p>
 
         {/*
-          자동 갱신 표시(왼쪽)와 날짜 선택(오른쪽)을 한 줄에 모아 하나의 도구줄처럼 보이게 합니다.
-          화면이 좁으면 flex-wrap 으로 날짜 선택이 다음 줄로 자연스럽게 내려갑니다.
+          자동 갱신 표시(왼쪽)와 날짜 선택 · 화면 모드(오른쪽)를 한 줄에 모아 하나의
+          도구줄처럼 보이게 합니다. 화면이 좁으면 flex-wrap 으로 다음 줄로 내려갑니다.
           (justify-between만 쓰면 좁을 때 글자가 세로로 쪼개져 보입니다)
         */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -70,9 +71,12 @@ export default async function Page({ searchParams }: PageProps) {
           ) : (
             <AutoRefresh intervalMs={30_000} />
           )}
-          <Suspense fallback={null}>
-            <DateFilterBar selected={date ?? null} />
-          </Suspense>
+          <div className="flex items-center gap-2">
+            <Suspense fallback={null}>
+              <DateFilterBar selected={date ?? null} />
+            </Suspense>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -111,7 +115,7 @@ async function PotList({ date }: { date: string | null }) {
           {date ? "이 날짜엔 팟이 없어요." : "아직 만들어진 팟이 없어요."}
         </p>
         <p className="mt-1.5 text-[13px] text-tertiary">
-          슬랙 채널에서 <code>/점심팟</code> 을 입력해 첫 팟을 만들어 보세요.
+          슬랙 채널에서 <code>/밥먹자</code> 을 입력해 첫 팟을 만들어 보세요.
         </p>
       </div>
     );
