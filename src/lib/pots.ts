@@ -159,6 +159,40 @@ export function listPots(limit = 50): Pot[] {
     .all(limit) as unknown as Pot[];
 }
 
+/**
+ * 특정 날짜(YYYY-MM-DD, 한국 시간 기준)에 만들어진 팟만 가져옵니다.
+ *
+ * created_at은 UTC로 저장돼 있어서 그냥 date()로 자르면 자정 근처 팟이
+ * 하루 밀릴 수 있습니다. '+9 hours'로 한국 시간으로 옮긴 뒤 날짜를 뗍니다.
+ */
+export function listPotsByDate(date: string): Pot[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM pots WHERE date(created_at, '+9 hours') = ? ORDER BY id DESC`,
+    )
+    .all(date) as unknown as Pot[];
+}
+
+/**
+ * 팟이 있었던 날짜 목록을 최신순으로 가져옵니다. (한국 시간 기준)
+ * 대시보드의 날짜 선택 목록을 채우는 용도입니다.
+ */
+export function listPotDates(): { date: string; count: number }[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT date(created_at, '+9 hours') AS date, COUNT(*) AS count
+         FROM pots
+        GROUP BY date
+        ORDER BY date DESC`,
+    )
+    .all() as unknown as { date: string; count: number }[];
+
+  // node:sqlite 가 돌려주는 행은 프로토타입이 null 이라, 서버 컴포넌트에서
+  // 클라이언트 컴포넌트로 그대로 넘기면 Next.js가 직렬화를 거부합니다.
+  // { ...row } 로 평범한 객체로 바꿔서 넘깁니다.
+  return rows.map((r) => ({ ...r }));
+}
+
 export function getParticipants(potId: number): Participant[] {
   return getDb()
     .prepare(`SELECT * FROM participants WHERE pot_id = ? ORDER BY joined_at ASC`)

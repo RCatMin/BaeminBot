@@ -9,13 +9,16 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 
 import { AutoRefresh } from "./auto-refresh.tsx";
+import { DateFilter } from "./date-filter.tsx";
 
 import {
   splitBill,
   formatWon,
   getParticipants,
   getUserNames,
+  listPotDates,
   listPots,
+  listPotsByDate,
   type Participant,
   type Pot,
 } from "@/lib/pots.ts";
@@ -27,7 +30,14 @@ import {
   type PotStatus,
 } from "@/lib/status.ts";
 
-export default function Page() {
+// Next.js 16 에서는 searchParams 가 Promise로 옵니다. (주소 뒤 ?date=... 를 읽는 부분)
+type PageProps = {
+  searchParams: Promise<{ date?: string }>;
+};
+
+export default async function Page({ searchParams }: PageProps) {
+  const { date } = await searchParams;
+
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10">
       <header className="mb-8">
@@ -37,7 +47,11 @@ export default function Page() {
           <code className="rounded bg-slate-200 px-1 py-0.5 dark:bg-slate-800">/점심팟</code> 으로
           만든 팟의 모집 · 정산 현황
         </p>
-        <AutoRefresh intervalMs={30_000} />
+        {/* 날짜를 선택해서 보고 있는 동안엔 자동 갱신이 오히려 헷갈릴 수 있어서 뺍니다. */}
+        {!date && <AutoRefresh intervalMs={30_000} />}
+        <Suspense fallback={null}>
+          <DateFilterBar selected={date ?? null} />
+        </Suspense>
       </header>
 
       {/*
@@ -46,25 +60,34 @@ export default function Page() {
         이렇게 해두면 Next.js가 미리 만들어둔 화면 껍데기에 이 부분만 나중에 채워 넣습니다.
       */}
       <Suspense fallback={<p className="text-sm text-slate-500">불러오는 중…</p>}>
-        <PotList />
+        <PotList date={date ?? null} />
       </Suspense>
     </main>
   );
 }
 
-async function PotList() {
+async function DateFilterBar({ selected }: { selected: string | null }) {
+  await connection();
+  const dates = listPotDates();
+  if (dates.length === 0) return null; // 팟이 하나도 없으면 고를 날짜도 없습니다.
+  return <DateFilter dates={dates} selected={selected} />;
+}
+
+async function PotList({ date }: { date: string | null }) {
   // connection(): "빌드할 때 미리 만들지 말고, 요청이 올 때마다 실행해줘"라는 표시입니다.
   // node:sqlite 처럼 동기 방식으로 읽는 DB는 이 줄이 없으면 빌드 시점의 값이 굳어버립니다.
   await connection();
 
-  const pots = listPots();
+  const pots = date ? listPotsByDate(date) : listPots();
   // 이름은 한 번에 다 읽어 옵니다. 팟마다 조회하면 같은 질의를 몇 번씩 반복하게 됩니다.
   const names = getUserNames();
 
   if (pots.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
-        <p className="text-slate-500 dark:text-slate-400">아직 만들어진 팟이 없어요.</p>
+        <p className="text-slate-500 dark:text-slate-400">
+          {date ? "이 날짜엔 팟이 없어요." : "아직 만들어진 팟이 없어요."}
+        </p>
         <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">
           슬랙 채널에서 <code>/점심팟</code> 을 입력해 첫 팟을 만들어 보세요.
         </p>
