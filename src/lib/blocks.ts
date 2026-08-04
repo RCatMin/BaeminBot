@@ -8,7 +8,7 @@
 
 import type { KnownBlock, View } from '@slack/types';
 import { POT_STATUS, STATUS_EMOJI, STATUS_LABEL, STATUS_ORDER, type PotStatus } from './status.ts';
-import { formatWon, splitBill, type Account, type Participant, type Pot } from './pots.ts';
+import { formatWon, type Account, type Participant, type Pot } from './pots.ts';
 
 /**
  * 버튼과 모달을 구분하는 이름표들.
@@ -22,9 +22,12 @@ export const ACTION = {
   OPEN_SETTLE_MODAL: 'pot_open_settle_modal',
   MARK_PAID: 'pot_mark_paid',
   UNMARK_PAID: 'pot_unmark_paid',
+  DISPUTE: 'pot_dispute',
+  UNDISPUTE: 'pot_undispute',
   RESEND_DM: 'pot_resend_dm',
   FINISH: 'pot_finish',
   REOPEN: 'pot_reopen',
+  FINALIZE: 'pot_finalize',
   CANCEL: 'pot_cancel',
 } as const;
 
@@ -46,7 +49,6 @@ export const FIELD = {
   PLACE: 'place',
   MEET_AT: 'meet_at',
   CAPACITY: 'capacity',
-  TOTAL_AMOUNT: 'total_amount',
   REMEMBER_ACCOUNT: 'remember_account',
   BANK_NAME: 'bank_name',
   ACCOUNT_NUMBER: 'account_number',
@@ -55,6 +57,17 @@ export const FIELD = {
 
 /** FIELD 의 값들만 모은 타입. 이 목록에 없는 이름은 쓸 수 없습니다. */
 export type FieldId = (typeof FIELD)[keyof typeof FIELD];
+
+/**
+ * 정산 시작 모달의 "이 사람 얼마" 입력칸 이름표.
+ *
+ * 참여자 수가 팟마다 달라서 FIELD처럼 고정된 이름을 미리 정해둘 수 없습니다.
+ * 대신 슬랙 사용자 ID로 이름을 만드는 규칙 하나를 모달을 만들 때와 값을 읽을 때
+ * 똑같이 씁니다.
+ */
+export function amountBlockId(slackUserId: string): string {
+  return `amount:${slackUserId}`;
+}
 
 /** 계좌 입력 3칸. 함께 다루는 일이 많아 묶어둡니다. */
 export const ACCOUNT_FIELDS = [
@@ -92,9 +105,14 @@ function progressBar(status: PotStatus): string {
   // 취소된 팟은 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
   if (status === POT_STATUS.CANCELLED) return `🚫 *취소된 팟이에요*`;
 
-  return STATUS_ORDER.map((s) => (s === status ? `*${STATUS_LABEL[s]}*` : STATUS_LABEL[s])).join(
+  // 정산 마무리는 새 단계가 아니라 정산 완료 위에 얹는 잠금이라, 막대에서는
+  // 정산 완료 칸을 그대로 강조하고 그 아래 한 줄만 덧붙입니다.
+  const highlight = status === POT_STATUS.FINALIZED ? POT_STATUS.SETTLED : status;
+  const bar = STATUS_ORDER.map((s) => (s === highlight ? `*${STATUS_LABEL[s]}*` : STATUS_LABEL[s])).join(
     ' ─ ',
   );
+
+  return status === POT_STATUS.FINALIZED ? `${bar}\n🏁 *완전히 마무리됐어요. 더 이상 되돌릴 수 없어요.*` : bar;
 }
 
 /** 파티장만 누를 수 있는 취소 버튼. 정산이 끝나기 전 단계에 공통으로 붙습니다. */
@@ -139,24 +157,10 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
 
   // 3단계·4단계에서는 금액과 입금 현황을 함께 보여줍니다.
   if (pot.total_amount) {
-    const split = splitBill(pot.total_amount, participants.length);
     blocks.push({ type: 'divider' });
-
-    // 걷는 금액과 파티장 몫을 따로 적습니다.
-    // "1인당 23,010원 × 4명"만 보여주면 총액과 안 맞아 보이는데,
-    // 파티장은 자기한테 송금하지 않기 때문입니다.
-    const lines = [`*총 금액* ${formatWon(pot.total_amount)}원`];
-
-    if (split.payerCount > 0) {
-      lines.push(
-        `*보낼 금액* 1인당 ${formatWon(split.perPerson)}원 × ${split.payerCount}명 = ${formatWon(split.collected)}원`,
-      );
-      lines.push(`*파티장 몫* ${formatWon(split.organizerShare)}원`);
-    } else {
-      lines.push('_참여자가 파티장뿐이라 걷을 금액이 없어요._');
-    }
-
-    blocks.push(section(lines.join('\n')));
+    // 사람마다 낼 금액이 달라서 "1인당 X원"처럼 한 줄로 요약할 수 없습니다.
+    // 총액만 적고, 각자 얼마인지는 입금 현황 목록에서 보여줍니다.
+    blocks.push(section(`*총 금액* ${formatWon(pot.total_amount)}원`));
     blocks.push(section(`*입금 현황*\n${paymentStatusList(pot, participants)}`));
   }
 
@@ -166,12 +170,15 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
   return blocks;
 }
 
-/** 참여자별 입금 여부를 ✅/⬜ 로 나열합니다. */
+/** 참여자별 금액 · 입금 여부를 ✅/⬜/🚩 로 나열합니다. */
 function paymentStatusList(pot: Pot, participants: Participant[]): string {
   return participants
     .map((p) => {
       if (p.slack_user_id === pot.organizer_id) return `💰 ${mention(p.slack_user_id)} (파티장)`;
-      return `${p.paid === 1 ? '✅' : '⬜'} ${mention(p.slack_user_id)}`;
+
+      const icon = p.paid === 1 ? '✅' : p.disputed === 1 ? '🚩' : '⬜';
+      const amountText = p.amount ? ` ${formatWon(p.amount)}원` : '';
+      return `${icon} ${mention(p.slack_user_id)}${amountText}`;
     })
     .join('\n');
 }
@@ -229,7 +236,7 @@ function potActions(pot: Pot): KnownBlock | null {
       };
 
     // 3단계 정산 중: 파티장용 버튼만 남깁니다.
-    // (참여자의 "입금 완료" 버튼은 채널이 아니라 각자 받은 DM에 있습니다.
+    // (참여자의 "입금 완료" · "이상해요" 버튼은 채널이 아니라 각자 받은 DM에 있습니다.
     //  그래서 DM이 안 갔다면 재발송 버튼이 유일한 복구 수단입니다.)
     case POT_STATUS.SETTLING:
       return {
@@ -244,15 +251,15 @@ function potActions(pot: Pot): KnownBlock | null {
           {
             type: 'button',
             action_id: ACTION.FINISH,
-            text: { type: 'plain_text', text: '✅ 정산 마무리 (파티장)', emoji: true },
+            text: { type: 'plain_text', text: '✅ 정산 완료 처리 (파티장)', emoji: true },
             value: potId,
           },
           cancelButton(potId),
         ],
       };
 
-    // 4단계 정산 완료: 잘못 끝난 경우를 위해 되돌리는 버튼만 남깁니다.
-    // (마지막 사람이 "입금했어요"를 잘못 누르면 여기까지 자동으로 와버립니다)
+    // 4단계 정산 완료: 잘못 끝난 경우를 위해 되돌리는 버튼과, 정말 끝났을 때
+    // 완전히 잠그는 버튼을 함께 둡니다. 파티장이 직접 확인하고 골라야 합니다.
     case POT_STATUS.SETTLED:
       return {
         type: 'actions',
@@ -263,10 +270,18 @@ function potActions(pot: Pot): KnownBlock | null {
             text: { type: 'plain_text', text: '🔄 정산 다시 열기 (파티장)', emoji: true },
             value: potId,
           },
+          {
+            type: 'button',
+            action_id: ACTION.FINALIZE,
+            text: { type: 'plain_text', text: '🏁 정산 마무리 (파티장)', emoji: true },
+            style: 'primary',
+            value: potId,
+          },
         ],
       };
 
-    // 취소됨: 더 이상 누를 게 없습니다.
+    // 정산 마무리 · 취소됨: 더 이상 누를 게 없습니다.
+    case POT_STATUS.FINALIZED:
     case POT_STATUS.CANCELLED:
     default:
       return null;
@@ -275,24 +290,23 @@ function potActions(pot: Pot): KnownBlock | null {
 
 // ── 참여자에게 보내는 정산 DM ────────────────────────────────────────────────
 
+/** 이 사람의 입금 · 신고 상태. paid와 disputed가 동시에 true일 일은 없습니다(markPaid가 신고를 풀어줍니다). */
+export type SettlementDmState = { paid: boolean; disputed: boolean };
+
 /** 정산이 시작되면 참여자 각자에게 이 DM이 자동으로 갑니다. */
-export function settlementDm(
-  pot: Pot,
-  perPerson: number,
-  paid: boolean,
-): KnownBlock[] {
+export function settlementDm(pot: Pot, amount: number, state: SettlementDmState): KnownBlock[] {
   const account = `${pot.bank_name} ${pot.account_number}\n예금주: ${pot.account_holder}`;
 
   const blocks: KnownBlock[] = [
     section(
       `💸 *${pot.title}* 정산 안내\n${mention(pot.organizer_id)} 님이 정산을 시작했어요.`,
     ),
-    section(`*보낼 금액*\n*${formatWon(perPerson)}원*`),
+    section(`*보낼 금액*\n*${formatWon(amount)}원*`),
     section(`*입금 계좌*\n\`\`\`${account}\`\`\``),
     context('계좌번호를 길게 눌러 복사하세요.'),
   ];
 
-  if (paid) {
+  if (state.paid) {
     // 이미 입금 완료를 누른 사람에게는 완료 표시와 함께 되돌리는 버튼을 줍니다.
     // (잘못 눌렀는데 되돌릴 방법이 없으면 파티장에게 따로 부탁하는 수밖에 없습니다)
     blocks.push(section('✅ *입금 완료로 표시했어요.* 고맙습니다!'));
@@ -307,6 +321,28 @@ export function settlementDm(
         },
       ],
     });
+  } else if (state.disputed) {
+    // 금액이 이상하다고 신고한 사람에게는 그 사실을 알려주고, 신고를 취소하거나
+    // (문의가 풀렸다면) 그대로 입금 완료를 누를 수 있게 둘 다 남겨둡니다.
+    blocks.push(section('⚠️ *금액이 이상하다고 알렸어요.* 파티장이 확인하고 있어요.'));
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          action_id: ACTION.MARK_PAID,
+          text: { type: 'plain_text', text: '✅ 입금했어요', emoji: true },
+          style: 'primary',
+          value: String(pot.id),
+        },
+        {
+          type: 'button',
+          action_id: ACTION.UNDISPUTE,
+          text: { type: 'plain_text', text: '↩️ 신고 취소', emoji: true },
+          value: String(pot.id),
+        },
+      ],
+    });
   } else {
     blocks.push({
       type: 'actions',
@@ -316,6 +352,13 @@ export function settlementDm(
           action_id: ACTION.MARK_PAID,
           text: { type: 'plain_text', text: '✅ 입금했어요', emoji: true },
           style: 'primary',
+          value: String(pot.id),
+        },
+        {
+          type: 'button',
+          action_id: ACTION.DISPUTE,
+          text: { type: 'plain_text', text: '⚠️ 이상해요!', emoji: true },
+          style: 'danger',
           value: String(pot.id),
         },
       ],
@@ -397,10 +440,19 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
 }
 
 /**
- * "정산 시작" 버튼을 누르면 뜨는 모달. 총 금액과 최종 계좌를 확정합니다.
+ * "정산 시작" 버튼을 누르면 뜨는 모달. 참여자별 금액과 최종 계좌를 확정합니다.
  * 팟을 만들 때 계좌를 적어뒀다면 그 값이, 없으면 등록해둔 계좌가 채워집니다.
+ *
+ * payers는 파티장을 뺀 참여자 목록입니다. 메뉴가 저마다 달라서 낼 금액도
+ * 사람마다 다를 수 있으므로, 총액 한 칸 대신 참여자 한 명당 입력칸을 하나씩 만듭니다.
+ * names는 슬랙 ID 대신 사람 이름을 라벨에 보여주기 위한 것으로, 모르면 ID 그대로 씁니다.
  */
-export function startSettlementModal(pot: Pot, fallback: Account | null): View {
+export function startSettlementModal(
+  pot: Pot,
+  payers: Participant[],
+  names: Map<string, string>,
+  fallback: Account | null,
+): View {
   const prefill: Account | null =
     pot.bank_name && pot.account_number
       ? {
@@ -418,18 +470,18 @@ export function startSettlementModal(pot: Pot, fallback: Account | null): View {
     submit: { type: 'plain_text', text: 'DM 발송' },
     close: { type: 'plain_text', text: '취소' },
     blocks: [
-      section(`*${pot.title}*\n총 금액을 입력하면 참여자 전원에게 계좌 DM이 갑니다.`),
-      {
-        type: 'input',
-        block_id: FIELD.TOTAL_AMOUNT,
-        label: { type: 'plain_text', text: '총 결제 금액 (원)' },
+      section(`*${pot.title}*\n참여자마다 보낼 금액을 입력하면 전원에게 계좌 DM이 갑니다.`),
+      ...payers.map((p) => ({
+        type: 'input' as const,
+        block_id: amountBlockId(p.slack_user_id),
+        label: { type: 'plain_text' as const, text: names.get(p.slack_user_id) ?? p.slack_user_id },
         element: {
-          type: 'number_input',
+          type: 'number_input' as const,
           action_id: 'value',
           is_decimal_allowed: false,
           min_value: '1',
         },
-      },
+      })),
       { type: 'divider' },
       // 여기서는 계좌가 반드시 있어야 DM을 보낼 수 있으므로 필수 칸으로 만듭니다.
       // (선택으로 두면 "(옵션)"이라고 적혀 있는데 비우면 오류가 나서 앞뒤가 안 맞습니다.)

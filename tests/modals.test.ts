@@ -41,22 +41,53 @@ const fakePot = {
   account_holder: null,
 } as Parameters<typeof B.startSettlementModal>[0];
 
-describe('칸 이름은 FIELD 목록 안에 있어야 한다', () => {
+const fakePayers = [{ slack_user_id: 'U_A' }, { slack_user_id: 'U_B' }] as Parameters<
+  typeof B.startSettlementModal
+>[1];
+const noNames = new Map<string, string>();
+
+describe('칸 이름은 FIELD 목록 또는 참여자별 금액칸 이름이어야 한다', () => {
   const known = new Set<string>(Object.values(B.FIELD));
+  const knownAmountFields = new Set(fakePayers.map((p) => B.amountBlockId(p.slack_user_id)));
 
   const modals = {
     '팟 만들기': B.createPotModal('C1', null),
-    '정산 시작': B.startSettlementModal(fakePot, null),
+    '정산 시작': B.startSettlementModal(fakePot, fakePayers, noNames, null),
     '계좌 등록': B.saveAccountModal(null),
   };
 
   for (const [name, view] of Object.entries(modals)) {
     test(`${name} 모달`, () => {
       for (const block of inputs(view)) {
-        assert.ok(known.has(block.block_id!), `${block.block_id} 는 FIELD 에 없는 이름`);
+        assert.ok(
+          known.has(block.block_id!) || knownAmountFields.has(block.block_id!),
+          `${block.block_id} 는 FIELD 에도, 참여자별 금액칸에도 없는 이름`,
+        );
       }
     });
   }
+});
+
+describe('정산 시작: 참여자별 금액 입력칸', () => {
+  test('파티장을 뺀 참여자 수만큼 금액 입력칸이 생긴다', () => {
+    const view = B.startSettlementModal(fakePot, fakePayers, noNames, null);
+    const ids = inputs(view)
+      .map((b) => b.block_id)
+      .filter((id) => id?.startsWith('amount:'));
+    assert.deepEqual(ids, fakePayers.map((p) => B.amountBlockId(p.slack_user_id)));
+  });
+
+  test('이름을 알면 라벨에 ID 대신 이름이 보인다', () => {
+    const names = new Map([['U_A', '민수']]);
+    const view = B.startSettlementModal(fakePot, fakePayers, names, null);
+    const byId = new Map(
+      inputs(view).map((b) => [b.block_id, b as unknown as { label: { text: string } }]),
+    );
+
+    assert.equal(byId.get(B.amountBlockId('U_A'))!.label.text, '민수');
+    // 이름을 모르면 ID 그대로 보여줍니다.
+    assert.equal(byId.get(B.amountBlockId('U_B'))!.label.text, 'U_B');
+  });
 });
 
 describe('필수·선택 표시가 실제 동작과 맞아야 한다', () => {
@@ -76,7 +107,9 @@ describe('필수·선택 표시가 실제 동작과 맞아야 한다', () => {
   test('정산 시작: 계좌는 필수 — 없으면 DM을 보낼 수 없다', () => {
     // 예전에는 여기가 optional 이라 "(옵션)"으로 보였는데
     // 비우고 제출하면 "모두 입력해 주세요" 오류가 났습니다.
-    const byId = new Map(inputs(B.startSettlementModal(fakePot, null)).map((b) => [b.block_id, b]));
+    const byId = new Map(
+      inputs(B.startSettlementModal(fakePot, fakePayers, noNames, null)).map((b) => [b.block_id, b]),
+    );
     for (const id of B.ACCOUNT_FIELDS) {
       assert.notEqual(byId.get(id)?.optional, true, `${id} 는 필수여야 함`);
     }
@@ -106,7 +139,7 @@ describe('장소는 정해진 곳만 고를 수 있다', () => {
 
 describe('계좌 저장 동의 체크박스', () => {
   test('등록해둔 계좌가 없으면 꺼진 채로 열린다 — 묻지 않고 저장하지 않는다', () => {
-    const box = inputs(B.startSettlementModal(fakePot, null)).find(
+    const box = inputs(B.startSettlementModal(fakePot, fakePayers, noNames, null)).find(
       (b) => b.block_id === B.FIELD.REMEMBER_ACCOUNT,
     )!;
 
@@ -115,7 +148,7 @@ describe('계좌 저장 동의 체크박스', () => {
 
   test('이미 등록해둔 사람은 켜진 채로 열린다', () => {
     const saved = { bank_name: 'ㅇ', account_number: '1', account_holder: 'ㄱ' };
-    const box = inputs(B.startSettlementModal(fakePot, saved)).find(
+    const box = inputs(B.startSettlementModal(fakePot, fakePayers, noNames, saved)).find(
       (b) => b.block_id === B.FIELD.REMEMBER_ACCOUNT,
     )!;
 
@@ -163,8 +196,12 @@ describe('상태별 버튼', () => {
     assert.ok(ids.includes(B.ACTION.FINISH));
   });
 
-  test('정산 완료: 다시 열기만 남는다', () => {
-    assert.deepEqual(buttonsFor(POT_STATUS.SETTLED), [B.ACTION.REOPEN]);
+  test('정산 완료: 다시 열기와 마무리 둘 다 있다', () => {
+    assert.deepEqual(buttonsFor(POT_STATUS.SETTLED), [B.ACTION.REOPEN, B.ACTION.FINALIZE]);
+  });
+
+  test('정산 마무리: 더 이상 누를 게 없다 — 완전히 끝난 상태', () => {
+    assert.deepEqual(buttonsFor(POT_STATUS.FINALIZED), []);
   });
 
   test('취소됨: 누를 게 없다', () => {

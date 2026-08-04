@@ -15,7 +15,8 @@ const { getDb } = await import('../src/lib/db.ts');
 
 const LEADER = 'U_ACC_LEADER';
 
-function settledPot(organizerId = LEADER) {
+/** 정산까지 마무리해서(FINALIZED) 계좌 삭제 대상이 되는 팟을 만듭니다. */
+function finalizedPot(organizerId = LEADER) {
   const pot = P.createPot({
     channelId: 'C_TEST',
     organizerId,
@@ -27,9 +28,10 @@ function settledPot(organizerId = LEADER) {
   });
   P.joinPot(pot.id, 'U_PAYER');
   P.closePot(pot.id, organizerId);
-  P.startSettlement(pot.id, organizerId, 20000, TEST_ACCOUNT);
+  P.startSettlement(pot.id, organizerId, [{ slackUserId: 'U_PAYER', amount: 20000 }], TEST_ACCOUNT);
   P.markPaid(pot.id, 'U_PAYER', true);
   P.finishSettlement(pot.id, organizerId);
+  P.finalizeSettlement(pot.id, organizerId);
   return P.getPot(pot.id)!;
 }
 
@@ -94,14 +96,14 @@ describe('사용자 이름 기억', () => {
 });
 
 describe('계좌번호 보관 기간', () => {
-  test('방금 끝난 팟은 아직 지우지 않는다 — 정산을 다시 열 수 있어야 하므로', () => {
-    const pot = settledPot();
+  test('방금 마무리한 팟은 아직 지우지 않는다 — 유예 시간을 두기 때문', () => {
+    const pot = finalizedPot();
     P.purgeFinishedAccounts();
     assert.equal(P.getPot(pot.id)!.account_number, TEST_ACCOUNT.account_number);
   });
 
   test('하루가 지난 팟의 계좌번호는 지운다', () => {
-    const pot = settledPot();
+    const pot = finalizedPot();
     pretendItEndedDaysAgo(pot.id, 2);
 
     P.purgeFinishedAccounts();
@@ -110,6 +112,27 @@ describe('계좌번호 보관 기간', () => {
     assert.equal(after.account_number, null);
     assert.equal(after.bank_name, null);
     assert.equal(after.account_holder, null);
+  });
+
+  test('정산 완료(SETTLED) 상태로는 아무리 오래돼도 지우지 않는다 — 아직 다시 열 수 있어야 하므로', () => {
+    const pot = P.createPot({
+      channelId: 'C_TEST',
+      organizerId: LEADER,
+      title: '아직 마무리 전',
+      place: null,
+      meetAt: null,
+      capacity: 0,
+      account: null,
+    });
+    P.joinPot(pot.id, 'U_PAYER');
+    P.closePot(pot.id, LEADER);
+    P.startSettlement(pot.id, LEADER, [{ slackUserId: 'U_PAYER', amount: 20000 }], TEST_ACCOUNT);
+    P.markPaid(pot.id, 'U_PAYER', true);
+    P.finishSettlement(pot.id, LEADER); // SETTLED. 마무리(FINALIZE)는 아직 안 눌렀습니다.
+    pretendItEndedDaysAgo(pot.id, 30);
+
+    P.purgeFinishedAccounts();
+    assert.equal(P.getPot(pot.id)!.account_number, TEST_ACCOUNT.account_number);
   });
 
   test('아직 진행 중인 팟은 오래돼도 건드리지 않는다', () => {
@@ -124,7 +147,7 @@ describe('계좌번호 보관 기간', () => {
     });
     P.joinPot(pot.id, 'U_PAYER');
     P.closePot(pot.id, LEADER);
-    P.startSettlement(pot.id, LEADER, 10000, TEST_ACCOUNT);
+    P.startSettlement(pot.id, LEADER, [{ slackUserId: 'U_PAYER', amount: 10000 }], TEST_ACCOUNT);
     pretendItEndedDaysAgo(pot.id, 30);
 
     P.purgeFinishedAccounts();
@@ -132,13 +155,13 @@ describe('계좌번호 보관 기간', () => {
   });
 
   test('계좌만 지우고 금액·참여자·상태는 남긴다', () => {
-    const pot = settledPot();
+    const pot = finalizedPot();
     pretendItEndedDaysAgo(pot.id, 2);
     P.purgeFinishedAccounts();
 
     const after = P.getPot(pot.id)!;
     assert.equal(after.total_amount, 20000, '금액은 남아야 대시보드가 보여줄 수 있다');
-    assert.equal(after.status, 'SETTLED');
+    assert.equal(after.status, 'FINALIZED');
     assert.equal(P.getParticipants(pot.id).length, 2);
   });
 

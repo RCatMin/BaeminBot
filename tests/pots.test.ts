@@ -30,12 +30,12 @@ function newPot(capacity = 0) {
   });
 }
 
-/** 정산 중 단계까지 진행한 팟을 만듭니다. */
-function potInSettling(total = 30000) {
+/** 정산 중 단계까지 진행한 팟을 만듭니다. 참여자는 OTHER 한 명, 낼 금액은 amount. */
+function potInSettling(amount = 30000) {
   const pot = newPot();
   P.joinPot(pot.id, OTHER);
   P.closePot(pot.id, LEADER);
-  P.startSettlement(pot.id, LEADER, total, TEST_ACCOUNT);
+  P.startSettlement(pot.id, LEADER, [{ slackUserId: OTHER, amount }], TEST_ACCOUNT);
   return P.getPot(pot.id)!;
 }
 
@@ -125,21 +125,55 @@ describe('3단계 · 정산 시작', () => {
   test('파티장만 시작할 수 있다', () => {
     const pot = newPot();
     P.closePot(pot.id, LEADER);
-    assert.ok(!P.startSettlement(pot.id, OTHER, 10000, TEST_ACCOUNT).ok);
+    assert.ok(!P.startSettlement(pot.id, OTHER, [], TEST_ACCOUNT).ok);
   });
 
   test('모집중인 팟은 바로 정산할 수 없다 (마감이 먼저)', () => {
     const pot = newPot();
-    assert.ok(!P.startSettlement(pot.id, LEADER, 10000, TEST_ACCOUNT).ok);
+    assert.ok(!P.startSettlement(pot.id, LEADER, [], TEST_ACCOUNT).ok);
   });
 
-  test('금액은 0보다 커야 한다', () => {
+  test('참여자 금액은 0보다 커야 한다', () => {
     const pot = newPot();
+    P.joinPot(pot.id, OTHER);
     P.closePot(pot.id, LEADER);
     for (const bad of [0, -1000, Number.NaN]) {
-      const result = P.startSettlement(pot.id, LEADER, bad, TEST_ACCOUNT);
+      const result = P.startSettlement(pot.id, LEADER, [{ slackUserId: OTHER, amount: bad }], TEST_ACCOUNT);
       assert.ok(!result.ok, `${bad} 은 거절돼야 함`);
     }
+  });
+
+  test('참여자 중 금액을 안 적은 사람이 있으면 거절된다', () => {
+    const pot = newPot();
+    P.joinPot(pot.id, 'U_A');
+    P.joinPot(pot.id, 'U_B');
+    P.closePot(pot.id, LEADER);
+    // U_B 금액이 빠졌습니다.
+    const result = P.startSettlement(pot.id, LEADER, [{ slackUserId: 'U_A', amount: 10000 }], TEST_ACCOUNT);
+    assert.ok(!result.ok);
+  });
+
+  test('참여자마다 다른 금액을 매길 수 있고, 총액은 그 합이다', () => {
+    const pot = newPot();
+    P.joinPot(pot.id, 'U_A');
+    P.joinPot(pot.id, 'U_B');
+    P.closePot(pot.id, LEADER);
+
+    const result = P.startSettlement(
+      pot.id,
+      LEADER,
+      [
+        { slackUserId: 'U_A', amount: 12000 },
+        { slackUserId: 'U_B', amount: 8000 },
+      ],
+      TEST_ACCOUNT,
+    );
+    assert.ok(result.ok);
+    assert.equal(result.value.total_amount, 20000);
+
+    const participants = P.getParticipants(pot.id);
+    assert.equal(participants.find((p) => p.slack_user_id === 'U_A')!.amount, 12000);
+    assert.equal(participants.find((p) => p.slack_user_id === 'U_B')!.amount, 8000);
   });
 
   test('시작하면 금액과 계좌가 팟에 저장된다', () => {
@@ -170,7 +204,15 @@ describe('3단계 · 입금 표시', () => {
     P.joinPot(pot.id, 'U_A');
     P.joinPot(pot.id, 'U_B');
     P.closePot(pot.id, LEADER);
-    P.startSettlement(pot.id, LEADER, 30000, TEST_ACCOUNT);
+    P.startSettlement(
+      pot.id,
+      LEADER,
+      [
+        { slackUserId: 'U_A', amount: 15000 },
+        { slackUserId: 'U_B', amount: 15000 },
+      ],
+      TEST_ACCOUNT,
+    );
 
     const first = P.markPaid(pot.id, 'U_A', true);
     assert.ok(first.ok && !first.value.allPaid, '아직 U_B 가 남았다');
@@ -214,6 +256,55 @@ describe('4단계 · 정산 완료와 되돌리기', () => {
 
   test('정산 중이 아닌 팟은 다시 열 수 없다', () => {
     const pot = newPot();
+    assert.ok(!P.reopenSettlement(pot.id, LEADER).ok);
+  });
+});
+
+describe('3단계 · 이상해요 신고', () => {
+  test('신고하고 취소할 수 있다', () => {
+    const pot = potInSettling();
+    assert.ok(P.markDisputed(pot.id, OTHER, true).ok);
+    assert.equal(P.getParticipants(pot.id).find((p) => p.slack_user_id === OTHER)!.disputed, 1);
+
+    assert.ok(P.markDisputed(pot.id, OTHER, false).ok);
+    assert.equal(P.getParticipants(pot.id).find((p) => p.slack_user_id === OTHER)!.disputed, 0);
+  });
+
+  test('참여하지 않은 사람은 신고할 수 없다', () => {
+    const pot = potInSettling();
+    assert.ok(!P.markDisputed(pot.id, 'U_STRANGER', true).ok);
+  });
+
+  test('입금 완료로 표시하면 신고는 자동으로 풀린다 — 입금했다는 건 의문이 풀렸다는 뜻', () => {
+    const pot = potInSettling();
+    P.markDisputed(pot.id, OTHER, true);
+    P.markPaid(pot.id, OTHER, true);
+    assert.equal(P.getParticipants(pot.id).find((p) => p.slack_user_id === OTHER)!.disputed, 0);
+  });
+});
+
+describe('정산 마무리 — 완전히 끝내기', () => {
+  test('정산 완료 상태에서만 마무리할 수 있다', () => {
+    const pot = newPot();
+    assert.ok(!P.finalizeSettlement(pot.id, LEADER).ok);
+  });
+
+  test('파티장만 마무리할 수 있다', () => {
+    const pot = potInSettling();
+    P.markPaid(pot.id, OTHER, true);
+    P.finishSettlement(pot.id, LEADER);
+
+    assert.ok(!P.finalizeSettlement(pot.id, OTHER).ok);
+    assert.ok(P.finalizeSettlement(pot.id, LEADER).ok);
+  });
+
+  test('마무리하면 더 이상 다시 열 수 없다 — 정산 완료와 다른 점', () => {
+    const pot = potInSettling();
+    P.markPaid(pot.id, OTHER, true);
+    P.finishSettlement(pot.id, LEADER);
+    P.finalizeSettlement(pot.id, LEADER);
+
+    assert.equal(P.getPot(pot.id)!.status, POT_STATUS.FINALIZED);
     assert.ok(!P.reopenSettlement(pot.id, LEADER).ok);
   });
 });

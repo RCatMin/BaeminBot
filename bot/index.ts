@@ -7,10 +7,11 @@
  * 우리 봇이 슬랙에 웹소켓으로 붙습니다. 그래서 공개 주소(ngrok, 배포)가 필요 없습니다.
  *
  * 전체 흐름
- *   /점심팟  → 모달 입력 → 채널에 모집 메시지          [1단계 모집중]
- *   🔒 모집 마감 (파티장)                                  [2단계 모집 완료]
- *   💸 정산 시작 (파티장) → 금액·계좌 입력 → 참여자 DM     [3단계 정산 중]
- *   각자 "✅ 입금했어요" → 전원 완료되면 자동 전환        [4단계 정산 완료]
+ *   /점심팟  → 모달 입력 → 채널에 모집 메시지              [1단계 모집중]
+ *   🔒 모집 마감 (파티장)                                     [2단계 모집 완료]
+ *   💸 정산 시작 (파티장) → 참여자별 금액·계좌 입력 → DM      [3단계 정산 중]
+ *   각자 "✅ 입금했어요" (또는 "⚠️ 이상해요!") → 전원 완료되면 자동 전환  [4단계 정산 완료]
+ *   🏁 정산 마무리 (파티장) → 완전히 종료, 되돌릴 수 없음
  */
 
 import { App } from '@slack/bolt';
@@ -21,6 +22,7 @@ import {
   ACTION,
   FIELD,
   VIEW,
+  amountBlockId,
   createPotModal,
   type FieldId,
   mention,
@@ -30,11 +32,11 @@ import {
   startSettlementModal,
 } from '../src/lib/blocks.ts';
 import {
-  amountPerPerson,
   cancelPot,
   closePot,
   createPot,
   deletePot,
+  finalizeSettlement,
   finishSettlement,
   formatWon,
   getAccount,
@@ -44,6 +46,7 @@ import {
   joinPot,
   leavePot,
   listUnnamedUserIds,
+  markDisputed,
   markPaid,
   purgeFinishedAccounts,
   rememberUserName,
@@ -53,6 +56,7 @@ import {
   setPotMessage,
   startSettlement,
   type Account,
+  type ParticipantAmount,
   type Pot,
 } from '../src/lib/pots.ts';
 import { POT_STATUS, STATUS_LABEL } from '../src/lib/status.ts';
@@ -275,6 +279,30 @@ function accountFromView(values: ModalValues): Account | null {
   return { bank_name, account_number, account_holder };
 }
 
+/**
+ * 정산 모달에서 참여자별 금액을 꺼냅니다.
+ *
+ * 참여자마다 입력칸 이름(amountBlockId)이 달라서 FIELD 처럼 고정된 상수로
+ * 다룰 수 없으므로, blocks.ts와 공유하는 이름 규칙(amountBlockId)으로 직접 찾습니다.
+ * 값이 없거나 0 이하인 사람은 missing에 담아 돌려줍니다.
+ */
+function amountsFromView(
+  values: ModalValues,
+  payerIds: string[],
+): { amounts: ParticipantAmount[]; missing: string[] } {
+  const amounts: ParticipantAmount[] = [];
+  const missing: string[] = [];
+
+  for (const slackUserId of payerIds) {
+    const raw = values[amountBlockId(slackUserId)]?.value?.value;
+    const amount = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(amount) || amount <= 0) missing.push(slackUserId);
+    else amounts.push({ slackUserId, amount: Math.round(amount) });
+  }
+
+  return { amounts, missing };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1단계: 모집중 — 팟 만들기
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,7 +449,7 @@ app.action(ACTION.CLOSE, async ({ ack, body, action }) => {
 // 3단계: 정산 중
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 💸 정산 시작 버튼 → 금액·계좌 입력 모달을 띄웁니다. */
+/** 💸 정산 시작 버튼 → 참여자별 금액·계좌 입력 모달을 띄웁니다. */
 app.action(ACTION.OPEN_SETTLE_MODAL, async ({ ack, body, action, client }) => {
   await ack();
   const potId = Number((action as { value: string }).value);
@@ -439,9 +467,15 @@ app.action(ACTION.OPEN_SETTLE_MODAL, async ({ ack, body, action, client }) => {
     return;
   }
 
+  const payers = getParticipants(potId).filter((p) => p.slack_user_id !== pot.organizer_id);
+  if (payers.length === 0) {
+    await replyToClick(body, '참여자가 파티장뿐이라 정산할 금액이 없어요.');
+    return;
+  }
+
   await client.views.open({
     trigger_id: (body as { trigger_id: string }).trigger_id,
-    view: startSettlementModal(pot, getAccount(userId)),
+    view: startSettlementModal(pot, payers, getUserNames(), getAccount(userId)),
   });
 });
 
@@ -454,9 +488,25 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
   const potId = Number(view.private_metadata);
   const userId = body.user.id;
 
-  const totalAmount = Number(field(values, FIELD.TOTAL_AMOUNT) ?? '0');
-  const account = accountFromView(values);
+  const pot = getPot(potId);
+  if (!pot) {
+    await ack({ response_action: 'errors', errors: { [FIELD.ACCOUNT_HOLDER]: '이미 사라진 팟이에요.' } });
+    return;
+  }
 
+  const payerIds = getParticipants(potId)
+    .map((p) => p.slack_user_id)
+    .filter((id) => id !== pot.organizer_id);
+  const { amounts, missing } = amountsFromView(values, payerIds);
+
+  if (missing.length > 0) {
+    const errors: Record<string, string> = {};
+    for (const id of missing) errors[amountBlockId(id)] = '0보다 큰 금액을 입력해 주세요.';
+    await ack({ response_action: 'errors', errors });
+    return;
+  }
+
+  const account = accountFromView(values);
   if (!account) {
     await ack({
       response_action: 'errors',
@@ -465,16 +515,14 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
     return;
   }
 
-  const result = startSettlement(potId, userId, totalAmount, account);
+  const result = startSettlement(potId, userId, amounts, account);
   if (!result.ok) {
-    await ack({ response_action: 'errors', errors: { [FIELD.TOTAL_AMOUNT]: result.error } });
+    await ack({ response_action: 'errors', errors: { [FIELD.ACCOUNT_HOLDER]: result.error } });
     return;
   }
   await ack();
 
-  const pot = result.value;
-  const participants = getParticipants(pot.id);
-  const perPerson = amountPerPerson(totalAmount, participants.length);
+  const settled = result.value;
 
   // 계좌 저장은 체크했을 때만 합니다.
   // 예전에는 묻지도 않고 저장해서, 이번 정산에만 쓰려던 계좌가 다음 팟에 자동으로
@@ -483,25 +531,25 @@ app.view(VIEW.START_SETTLEMENT, async ({ ack, body, view, client }) => {
     saveAccount(userId, null, account);
   }
 
-  const { sent, failed } = await sendSettlementDms(pot);
+  const { sent, failed } = await sendSettlementDms(settled);
 
-  await refreshPotMessage(pot);
+  await refreshPotMessage(settled);
 
   // 채널 스레드에도 결과를 그대로 적습니다. 실패를 숨기지 않습니다.
   const summary =
     failed.length === 0
-      ? `💸 정산이 시작됐어요. 1인당 *${formatWon(perPerson)}원* — 참여자분들 DM 확인해 주세요!`
-      : `💸 정산이 시작됐어요. 1인당 *${formatWon(perPerson)}원*\n` +
+      ? `💸 정산이 시작됐어요. 총 *${formatWon(settled.total_amount ?? 0)}원* — 참여자분들 DM 확인해 주세요!`
+      : `💸 정산이 시작됐어요. 총 *${formatWon(settled.total_amount ?? 0)}원*\n` +
         `⚠️ ${sent.length}명에게는 DM이 갔지만 ${failed.length}명에게는 보내지 못했어요: ` +
         `${failed.map(mention).join(', ')}`;
 
   await client.chat.postMessage({
-    channel: pot.channel_id,
-    thread_ts: pot.message_ts ?? undefined,
+    channel: settled.channel_id,
+    thread_ts: settled.message_ts ?? undefined,
     text: summary,
   });
 
-  await reportDmFailures(pot, failed);
+  await reportDmFailures(settled, failed);
 });
 
 /** 📨 정산 DM 다시 보내기 — 아직 DM을 못 받은 사람에게만 다시 보냅니다. */
@@ -554,14 +602,14 @@ app.action(ACTION.MARK_PAID, async ({ ack, body, action, client }) => {
   }
 
   const { pot, allPaid } = result.value;
-  const perPerson = perPersonOf(pot);
+  const amount = amountOf(pot.id, userId);
 
-  await refreshSettlementDm(pot, userId, true);
+  await refreshSettlementDm(pot, userId);
 
   // 파티장에게 입금 알림을 보냅니다.
   await client.chat.postMessage({
     channel: pot.organizer_id,
-    text: `💰 ${mention(userId)} 님이 *${pot.title}* ${formatWon(perPerson)}원 입금 완료로 표시했어요.`,
+    text: `💰 ${mention(userId)} 님이 *${pot.title}* ${formatWon(amount)}원 입금 완료로 표시했어요.`,
   });
 
   if (allPaid) {
@@ -596,7 +644,7 @@ app.action(ACTION.UNMARK_PAID, async ({ ack, body, action, client }) => {
   }
 
   const { pot } = result.value;
-  await refreshSettlementDm(pot, userId, false);
+  await refreshSettlementDm(pot, userId);
 
   await client.chat.postMessage({
     channel: pot.organizer_id,
@@ -604,6 +652,47 @@ app.action(ACTION.UNMARK_PAID, async ({ ack, body, action, client }) => {
   });
 
   await refreshPotMessage(pot);
+});
+
+/** ⚠️ 이상해요! — 정산 금액이 이상하다고 파티장에게 알립니다. (DM에서 누름) */
+app.action(ACTION.DISPUTE, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = markDisputed(potId, userId, true);
+  if (!result.ok) {
+    await client.chat.postMessage({ channel: userId, text: result.error });
+    return;
+  }
+
+  const pot = result.value;
+  const amount = amountOf(pot.id, userId);
+
+  await refreshSettlementDm(pot, userId);
+  await client.chat.postMessage({
+    channel: pot.organizer_id,
+    text:
+      `⚠️ ${mention(userId)} 님이 *${pot.title}* 정산 금액(${formatWon(amount)}원)이 이상하다고 알려왔어요.\n` +
+      `직접 확인해서 맞는 금액이면 그대로 안내해 주시고, 잘못됐다면 이 팟은 *🚫 팟 취소* 하고 정확한 금액으로 새로 만들어 주세요.`,
+  });
+  await refreshPotMessage(pot);
+});
+
+/** ↩️ 신고 취소 — "이상해요" 신고를 취소합니다. (DM에서 누름) */
+app.action(ACTION.UNDISPUTE, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = markDisputed(potId, userId, false);
+  if (!result.ok) {
+    await client.chat.postMessage({ channel: userId, text: result.error });
+    return;
+  }
+
+  await refreshSettlementDm(result.value, userId);
+  await refreshPotMessage(result.value);
 });
 
 /**
@@ -620,7 +709,6 @@ async function sendSettlementDms(
   { onlyMissing = false }: { onlyMissing?: boolean } = {},
 ): Promise<{ sent: string[]; failed: string[] }> {
   const participants = getParticipants(pot.id);
-  const perPerson = amountPerPerson(pot.total_amount ?? 0, participants.length);
 
   const sent: string[] = [];
   const failed: string[] = [];
@@ -628,6 +716,8 @@ async function sendSettlementDms(
   for (const participant of participants) {
     if (participant.slack_user_id === pot.organizer_id) continue;
     if (onlyMissing && participant.dm_ts) continue; // 이미 받은 사람은 건너뜁니다.
+
+    const amount = participant.amount ?? 0;
 
     try {
       // 1) 이 사람과의 1:1 대화방을 엽니다(이미 있으면 그 방을 돌려줍니다).
@@ -638,8 +728,11 @@ async function sendSettlementDms(
       // 2) 그 방에 정산 안내를 보냅니다.
       const posted = await client.chat.postMessage({
         channel: dmChannel,
-        text: `💸 ${pot.title} 정산 ${formatWon(perPerson)}원`,
-        blocks: settlementDm(pot, perPerson, participant.paid === 1),
+        text: `💸 ${pot.title} 정산 ${formatWon(amount)}원`,
+        blocks: settlementDm(pot, amount, {
+          paid: participant.paid === 1,
+          disputed: participant.disputed === 1,
+        }),
       });
       // 주소를 못 받으면 나중에 이 DM을 고칠 수 없으므로 실패로 봅니다.
       if (!posted.ts) throw new Error('DM은 보냈지만 메시지 주소를 받지 못했습니다.');
@@ -656,24 +749,34 @@ async function sendSettlementDms(
   return { sent, failed };
 }
 
-/** 이 팟의 1인당 금액. 여러 곳에서 같은 계산을 하고 있어서 한 곳으로 모았습니다. */
-function perPersonOf(pot: Pot): number {
-  return amountPerPerson(pot.total_amount ?? 0, getParticipants(pot.id).length);
+/** 이 사람이 보낼 금액. 여러 곳에서 같은 조회를 하고 있어서 한 곳으로 모았습니다. */
+function amountOf(potId: number, slackUserId: string): number {
+  return getParticipants(potId).find((p) => p.slack_user_id === slackUserId)?.amount ?? 0;
 }
 
 /**
- * 한 사람이 받은 정산 DM을 현재 입금 상태에 맞춰 다시 그립니다.
- * (입금했어요 ↔ 잘못 눌렀어요 를 오갈 때마다 이 DM의 버튼이 바뀝니다)
+ * 한 사람이 받은 정산 DM을 현재 입금 · 신고 상태에 맞춰 다시 그립니다.
+ * (입금했어요 ↔ 잘못 눌렀어요 ↔ 이상해요 를 오갈 때마다 이 DM의 버튼이 바뀝니다)
+ *
+ * paid/disputed 값을 인자로 받지 않고 DB에서 다시 읽어옵니다. 호출하는 쪽마다
+ * 상태를 조립해서 넘기면, 실제로 막 바뀐 값과 어긋날 여지가 있기 때문입니다.
  */
-async function refreshSettlementDm(pot: Pot, slackUserId: string, paid: boolean): Promise<void> {
+async function refreshSettlementDm(pot: Pot, slackUserId: string): Promise<void> {
   const me = getParticipants(pot.id).find((p) => p.slack_user_id === slackUserId);
   if (!me?.dm_channel_id || !me.dm_ts) return; // DM을 못 받은 사람이면 고칠 것도 없습니다.
+
+  const state = { paid: me.paid === 1, disputed: me.disputed === 1 };
+  const headline = state.paid
+    ? `✅ ${pot.title} 입금 완료`
+    : state.disputed
+      ? `⚠️ ${pot.title} 정산 금액 문의`
+      : `💸 ${pot.title} 정산 안내`;
 
   await client.chat.update({
     channel: me.dm_channel_id,
     ts: me.dm_ts,
-    text: paid ? `✅ ${pot.title} 입금 완료` : `💸 ${pot.title} 정산 안내`,
-    blocks: settlementDm(pot, perPersonOf(pot), paid),
+    text: headline,
+    blocks: settlementDm(pot, me.amount ?? 0, state),
   });
 }
 
@@ -688,7 +791,7 @@ async function reportDmFailures(pot: Pot, failed: string[]): Promise<void> {
       `${failed.map(mention).join(', ')}\n\n` +
       `봇과 DM을 주고받을 수 없는 설정이거나 워크스페이스를 떠났을 수 있어요.\n` +
       `채널의 모집 메시지에서 *📨 정산 DM 다시 보내기* 를 눌러 재시도할 수 있고,\n` +
-      `계속 안 되면 계좌를 직접 알려주신 뒤 *✅ 정산 마무리* 로 끝내시면 됩니다.`,
+      `계속 안 되면 계좌를 직접 알려주신 뒤 *✅ 정산 완료 처리* 로 끝내시면 됩니다.`,
   });
 }
 
@@ -696,7 +799,7 @@ async function reportDmFailures(pot: Pot, failed: string[]): Promise<void> {
 // 4단계: 정산 완료
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** ✅ 정산 마무리 — 현금으로 받았거나 할 때 파티장이 수동으로 끝낼 수 있습니다. */
+/** ✅ 정산 완료 처리 — 현금으로 받았거나 할 때 파티장이 수동으로 끝낼 수 있습니다. */
 app.action(ACTION.FINISH, async ({ ack, body, action }) => {
   await ack();
   const potId = Number((action as { value: string }).value);
@@ -729,7 +832,28 @@ app.action(ACTION.REOPEN, async ({ ack, body, action }) => {
   await client.chat.postMessage({
     channel: pot.channel_id,
     thread_ts: pot.message_ts ?? undefined,
-    text: `🔄 *${pot.title}* 정산을 다시 열었어요. 입금 확인이 끝나면 다시 마무리해 주세요.`,
+    text: `🔄 *${pot.title}* 정산을 다시 열었어요. 입금 확인이 끝나면 다시 완료 처리해 주세요.`,
+  });
+});
+
+/** 🏁 정산 마무리 — 완전히 끝냅니다. 이후로는 되돌릴 수 없어요. */
+app.action(ACTION.FINALIZE, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = finalizeSettlement(potId, userId);
+  if (!result.ok) {
+    await replyToClick(body, result.error);
+    return;
+  }
+
+  const pot = result.value;
+  await refreshPotMessage(pot);
+  await client.chat.postMessage({
+    channel: pot.channel_id,
+    thread_ts: pot.message_ts ?? undefined,
+    text: `🏁 *${pot.title}* 정산을 완전히 마무리했어요. 수고하셨습니다!`,
   });
 });
 
@@ -786,7 +910,7 @@ async function announceSettled(pot: Pot): Promise<void> {
   await client.chat.postMessage({
     channel: pot.channel_id,
     thread_ts: pot.message_ts ?? undefined,
-    text: `✅ *${pot.title}* 정산이 모두 끝났어요. 수고하셨습니다!`,
+    text: `✅ *${pot.title}* 정산이 모두 끝났어요. 이상 없으면 파티장이 *🏁 정산 마무리* 로 완전히 닫아주세요.`,
   });
 }
 

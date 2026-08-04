@@ -16,7 +16,6 @@ import { AutoRefresh } from "./auto-refresh.tsx";
 import { DateFilter } from "./date-filter.tsx";
 
 import {
-  splitBill,
   formatWon,
   getParticipants,
   getUserNames,
@@ -27,6 +26,7 @@ import {
   type Pot,
 } from "@/lib/pots.ts";
 import {
+  POT_STATUS,
   STATUS_EMOJI,
   STATUS_LABEL,
   STATUS_ORDER,
@@ -140,10 +140,9 @@ function PotCard({
   participants: Participant[];
   names: Map<string, string>;
 }) {
-  // 파티장은 자기한테 송금하지 않으므로, 걷는 금액과 파티장 몫을 나눠서 봅니다.
-  const split = pot.total_amount ? splitBill(pot.total_amount, participants.length) : null;
   const payers = participants.filter((p) => p.slack_user_id !== pot.organizer_id);
   const paidCount = payers.filter((p) => p.paid === 1).length;
+  const disputedCount = payers.filter((p) => p.disputed === 1).length;
 
   return (
     <li className="rounded-3xl border border-line bg-card p-5 shadow-[var(--shadow-card)] sm:p-6">
@@ -164,6 +163,12 @@ function PotCard({
 
       <StatusTracker status={pot.status} />
 
+      {pot.status === POT_STATUS.FINALIZED && (
+        <p className="mt-2 text-[12px] text-tertiary">
+          🏁 완전히 마무리됐어요. 더 이상 되돌릴 수 없어요.
+        </p>
+      )}
+
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-[13px] sm:grid-cols-4">
         <Stat label="참여">
           {participants.length}명{pot.capacity > 0 ? ` / ${pot.capacity}` : ""}
@@ -171,35 +176,34 @@ function PotCard({
         <Stat label="총 금액">
           {pot.total_amount ? `${formatWon(pot.total_amount)}원` : "—"}
         </Stat>
-        {/* 보낼 사람이 없으면(파티장뿐) 1인당 금액은 의미가 없어서 — 로 둡니다. */}
-        <Stat label="1인당 보낼 금액">
-          {split && split.payerCount > 0 ? `${formatWon(split.perPerson)}원` : "—"}
-        </Stat>
         <Stat label="입금">{pot.total_amount ? `${paidCount} / ${payers.length}명` : "—"}</Stat>
+        {/* 신고가 없으면 굳이 강조하지 않고 "없음"으로만 조용히 둡니다. */}
+        <Stat label="이상 신고">
+          {pot.total_amount ? (disputedCount > 0 ? `${disputedCount}명` : "없음") : "—"}
+        </Stat>
       </dl>
 
-      {/* 총액이 어떻게 나뉘는지. 파티장 몫을 밝혀야 숫자가 맞아 보입니다. */}
-      {split && split.payerCount > 0 && (
-        <p className="mt-3 text-[12px] tabular-nums text-tertiary">
-          {formatWon(split.perPerson)}원 × {split.payerCount}명 ={" "}
-          {formatWon(split.collected)}원 걷고, 파티장이 {formatWon(split.organizerShare)}원 부담
-        </p>
-      )}
-
-      {/* 정산이 시작된 뒤에만 누가 입금했는지 보여줍니다. */}
+      {/* 정산이 시작된 뒤에만 참여자별 금액 · 입금 여부를 보여줍니다. 사람마다 낼 금액이
+          다를 수 있어서 pill 하나하나에 그 사람의 금액을 함께 적습니다. */}
       {pot.total_amount !== null && payers.length > 0 && (
         <ul className="mt-4 flex flex-wrap gap-2">
-          {payers.map((p) => (
-            <li
-              key={p.slack_user_id}
-              className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
-                p.paid === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-line/60 text-secondary"
-              }`}
-            >
-              {/* 이름을 아직 못 알아낸 사람은 원래 ID로 보여줍니다. */}
-              {p.paid === 1 ? "✅" : "⬜"} {names.get(p.slack_user_id) ?? p.slack_user_id}
-            </li>
-          ))}
+          {payers.map((p) => {
+            const icon = p.paid === 1 ? "✅" : p.disputed === 1 ? "🚩" : "⬜";
+            const style =
+              p.paid === 1
+                ? "bg-emerald-500/15 text-emerald-600"
+                : p.disputed === 1
+                  ? "bg-red-500/15 text-red-600"
+                  : "bg-line/60 text-secondary";
+
+            return (
+              <li key={p.slack_user_id} className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${style}`}>
+                {/* 이름을 아직 못 알아낸 사람은 원래 ID로 보여줍니다. */}
+                {icon} {names.get(p.slack_user_id) ?? p.slack_user_id}
+                {p.amount ? ` · ${formatWon(p.amount)}원` : ""}
+              </li>
+            );
+          })}
         </ul>
       )}
     </li>
@@ -258,6 +262,7 @@ function StatusBadge({ status }: { status: PotStatus }) {
     CLOSED: "bg-amber-500/15 text-amber-600",
     SETTLING: "bg-accent-soft text-accent",
     SETTLED: "bg-emerald-500/15 text-emerald-600",
+    FINALIZED: "bg-violet-500/15 text-violet-600",
     // 취소됨은 눈에 덜 띄게 회색으로 둡니다. 진행 중인 팟을 가리지 않도록요.
     CANCELLED: "bg-line/60 text-tertiary",
   };

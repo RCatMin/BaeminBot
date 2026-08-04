@@ -32,11 +32,16 @@ export type Participant = {
   pot_id: number;
   slack_user_id: string;
   joined_at: string;
+  amount: number | null; // 이 사람이 보낼 금액. 정산 시작 전에는 null.
   paid: number; // SQLite에는 true/false가 없어서 0 또는 1로 저장합니다.
   paid_at: string | null;
+  disputed: number; // 0=평범, 1="금액이 이상해요" 신고 중
   dm_channel_id: string | null;
   dm_ts: string | null;
 };
+
+/** 정산 시작할 때 한 사람에게 매길 금액. */
+export type ParticipantAmount = { slackUserId: string; amount: number };
 
 export type Account = {
   bank_name: string;
@@ -324,13 +329,17 @@ export function closePot(potId: number, actorId: string): Result<Pot> {
 // ── 3단계: 정산 중 ──────────────────────────────────────────────────────────
 
 /**
- * 정산을 시작합니다. 총 금액과 입금받을 계좌를 확정하고 상태를 SETTLING으로 옮깁니다.
+ * 정산을 시작합니다. 참여자별 금액과 입금받을 계좌를 확정하고 상태를 SETTLING으로 옮깁니다.
  * (실제 DM 발송은 슬랙 API가 필요하므로 봇 쪽에서 처리합니다.)
+ *
+ * 메뉴가 저마다 달라서 낼 금액도 사람마다 다를 수 있으므로, 총액을 똑같이 나누는 대신
+ * 파티장이 참여자 한 명 한 명에게 얼마씩 매길지 직접 입력받습니다.
+ * (파티장 자신은 자기한테 송금하지 않으므로 amounts에 넣지 않아도 됩니다.)
  */
 export function startSettlement(
   potId: number,
   actorId: string,
-  totalAmount: number,
+  amounts: ParticipantAmount[],
   account: Account,
 ): Result<Pot> {
   const pot = getPot(potId);
@@ -339,25 +348,44 @@ export function startSettlement(
   if (!canTransition(pot.status, POT_STATUS.SETTLING)) {
     return fail('지금 단계에서는 정산을 시작할 수 없어요. (모집 완료 상태여야 해요)');
   }
-  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-    return fail('총 금액은 0보다 큰 숫자여야 해요.');
+
+  // 파티장을 뺀 참여자 전원에게 0보다 큰 금액이 매겨져 있어야 합니다.
+  // (모달을 열 때와 제출할 때 사이에 참여자가 바뀔 일은 없지만 — 마감 이후로는 참여가
+  //  막혀 있습니다 — 혹시 모를 어긋남을 여기서도 한 번 더 막습니다)
+  const payers = getParticipants(potId).filter((p) => p.slack_user_id !== pot.organizer_id);
+  const amountById = new Map(amounts.map((a) => [a.slackUserId, a.amount]));
+
+  for (const payer of payers) {
+    const amount = amountById.get(payer.slack_user_id);
+    if (!Number.isFinite(amount) || (amount as number) <= 0) {
+      return fail('참여자 전원의 금액을 0보다 크게 입력해 주세요.');
+    }
   }
 
-  getDb()
-    .prepare(
-      `UPDATE pots
-          SET status = ?, total_amount = ?, bank_name = ?, account_number = ?, account_holder = ?, updated_at = ?
-        WHERE id = ?`,
-    )
-    .run(
-      POT_STATUS.SETTLING,
-      Math.round(totalAmount),
-      account.bank_name,
-      account.account_number,
-      account.account_holder,
-      now(),
+  const db = getDb();
+  const total = payers.reduce((sum, p) => sum + Math.round(amountById.get(p.slack_user_id)!), 0);
+
+  db.prepare(
+    `UPDATE pots
+        SET status = ?, total_amount = ?, bank_name = ?, account_number = ?, account_holder = ?, updated_at = ?
+      WHERE id = ?`,
+  ).run(
+    POT_STATUS.SETTLING,
+    total,
+    account.bank_name,
+    account.account_number,
+    account.account_holder,
+    now(),
+    potId,
+  );
+
+  for (const payer of payers) {
+    db.prepare(`UPDATE participants SET amount = ? WHERE pot_id = ? AND slack_user_id = ?`).run(
+      Math.round(amountById.get(payer.slack_user_id)!),
       potId,
+      payer.slack_user_id,
     );
+  }
 
   return ok(getPot(potId)!);
 }
@@ -380,6 +408,9 @@ export function setDmRef(
  * 입금 완료로 표시합니다.
  * 이걸로 전원이 입금 완료가 되면 allPaid가 true로 돌아오고,
  * 봇이 그걸 보고 4단계(정산 완료)로 자동 전환합니다.
+ *
+ * 입금 완료로 표시하면 "이상해요" 신고는 자동으로 풀립니다 — 돈을 보냈다는 건
+ * 금액에 대한 의문이 풀렸다는 뜻이라고 보기 때문입니다.
  */
 export function markPaid(
   potId: number,
@@ -391,9 +422,17 @@ export function markPaid(
   if (pot.status !== POT_STATUS.SETTLING) return fail('지금은 정산 중인 팟이 아니에요.');
   if (!isParticipant(potId, slackUserId)) return fail('참여하지 않은 팟이에요.');
 
-  getDb()
-    .prepare(`UPDATE participants SET paid = ?, paid_at = ? WHERE pot_id = ? AND slack_user_id = ?`)
-    .run(paid ? 1 : 0, paid ? now() : null, potId, slackUserId);
+  if (paid) {
+    getDb()
+      .prepare(
+        `UPDATE participants SET paid = 1, paid_at = ?, disputed = 0 WHERE pot_id = ? AND slack_user_id = ?`,
+      )
+      .run(now(), potId, slackUserId);
+  } else {
+    getDb()
+      .prepare(`UPDATE participants SET paid = 0, paid_at = NULL WHERE pot_id = ? AND slack_user_id = ?`)
+      .run(potId, slackUserId);
+  }
   touch(potId);
 
   const participants = getParticipants(potId);
@@ -402,6 +441,31 @@ export function markPaid(
   const allPaid = payers.length > 0 && payers.every((p) => p.paid === 1);
 
   return ok({ pot: getPot(potId)!, allPaid });
+}
+
+/**
+ * 정산 금액이 이상하다고 신고하거나, 그 신고를 취소합니다.
+ *
+ * 왜 필요한가: 참여자마다 금액이 달라지면서, "왜 내가 이만큼 내야 하지?"라는 의문이
+ * 생길 수 있습니다. 참여자가 직접 파티장에게 물어볼 수 있게 하는 대신, 신고 버튼을 눌러
+ * 파티장에게 바로 알리고 파티장이 정산을 다시 열거나 금액을 조정하게 합니다.
+ */
+export function markDisputed(
+  potId: number,
+  slackUserId: string,
+  disputed: boolean,
+): Result<Pot> {
+  const pot = getPot(potId);
+  if (!pot) return fail('이미 사라진 팟이에요.');
+  if (pot.status !== POT_STATUS.SETTLING) return fail('지금은 정산 중인 팟이 아니에요.');
+  if (!isParticipant(potId, slackUserId)) return fail('참여하지 않은 팟이에요.');
+
+  getDb()
+    .prepare(`UPDATE participants SET disputed = ? WHERE pot_id = ? AND slack_user_id = ?`)
+    .run(disputed ? 1 : 0, potId, slackUserId);
+  touch(potId);
+
+  return ok(getPot(potId)!);
 }
 
 // ── 4단계: 정산 완료 ────────────────────────────────────────────────────────
@@ -437,17 +501,33 @@ export function reopenSettlement(potId: number, actorId: string): Result<Pot> {
   return ok(getPot(potId)!);
 }
 
+/**
+ * 정산을 완전히 마무리합니다. 이후로는 되돌릴 수 없습니다(reopenSettlement는 SETTLED
+ * 상태에서만 동작하므로 FINALIZED에서는 막힙니다).
+ *
+ * 왜 필요한가: "정산 완료"만으로는 아직 파티장이 다시 열 수 있는 여지가 남아 있어서,
+ * 정말로 다 끝났다는 확정 짓는 동작이 따로 필요합니다. 이걸 눌러야 계좌번호도 지워지기
+ * 시작합니다.
+ */
+export function finalizeSettlement(potId: number, actorId: string): Result<Pot> {
+  return advance(potId, actorId, POT_STATUS.FINALIZED);
+}
+
 // ── 계좌번호 보관 기간 ──────────────────────────────────────────────────────
 
 /**
- * 끝난 팟(정산 완료 · 취소됨)에서 계좌번호를 지웁니다.
+ * 끝난 팟(정산 마무리 · 취소됨)에서 계좌번호를 지웁니다.
  *
  * 왜: 끝난 일의 계좌번호를 계속 들고 있을 이유가 없습니다. DB 파일을 복사하거나
  * 백업하면 그대로 따라가므로, 안 갖고 있는 게 가장 확실한 보호입니다.
  * 금액 · 참여자 · 입금 기록은 그대로 두어서 대시보드는 변함이 없습니다.
  *
- * graceHours 동안은 건드리지 않습니다. 잘못 끝난 정산을 "🔄 정산 다시 열기"로
- * 되돌리면 계좌가 다시 필요한데, 곧바로 지우면 그 길이 막히기 때문입니다.
+ * 정산 완료(SETTLED)는 아직 대상이 아닙니다. 파티장이 "🔄 정산 다시 열기"로
+ * 되돌릴 수 있는 단계라, 계좌를 지우면 그 길이 막힙니다. 계좌는 "🏁 정산 마무리"를
+ * 눌러 더 이상 되돌릴 수 없게 된 뒤에야 지웁니다.
+ *
+ * graceHours 동안은 건드리지 않습니다. 마무리 직후 바로 지우기보다는 약간의
+ * 여유를 두는 편이 안전합니다.
  *
  * @returns 지운 팟 개수
  */
@@ -462,7 +542,7 @@ export function purgeFinishedAccounts(graceHours = 24): number {
           AND updated_at < ?
           AND account_number IS NOT NULL`,
     )
-    .run(POT_STATUS.SETTLED, POT_STATUS.CANCELLED, cutoff);
+    .run(POT_STATUS.FINALIZED, POT_STATUS.CANCELLED, cutoff);
 
   return Number(info.changes);
 }
@@ -498,49 +578,6 @@ function advance(potId: number, actorId: string, to: PotStatus): Result<Pot> {
 /** 팟이 마지막으로 바뀐 시각만 갱신합니다. */
 function touch(potId: number): void {
   getDb().prepare(`UPDATE pots SET updated_at = ? WHERE id = ?`).run(now(), potId);
-}
-
-/**
- * 1인당 낼 금액을 계산합니다.
- * 참여 인원 전체(파티장 포함)로 나눈 뒤, 10원 단위로 올립니다.
- * 송금할 때 1원 단위가 남지 않게 하려는 것입니다.
- */
-export function amountPerPerson(totalAmount: number, headcount: number): number {
-  if (headcount <= 0) return 0;
-  return Math.ceil(totalAmount / headcount / 10) * 10;
-}
-
-/** 정산 금액이 실제로 어떻게 나뉘는지. */
-export type BillSplit = {
-  /** 참여자 한 명이 파티장에게 보낼 금액 */
-  perPerson: number;
-  /** 실제로 돈을 보내는 사람 수 (파티장 제외) */
-  payerCount: number;
-  /** 파티장이 받게 되는 총액 */
-  collected: number;
-  /** 파티장이 최종적으로 부담하는 금액 (총액 - 걷은 돈) */
-  organizerShare: number;
-};
-
-/**
- * 총 금액이 실제로 어떻게 나뉘는지 계산합니다.
- *
- * 왜 필요한가: "1인당 23,010원 (4명)"만 보여주면 곱해서 92,040원이 되는데
- * 총액은 92,010원이라 안 맞아 보입니다. 파티장은 자기한테 송금하지 않으므로
- * 실제로는 3명만 보내고 나머지는 파티장이 부담합니다. 그 구조를 그대로 보여주려고
- * 걷는 금액과 파티장 몫을 따로 계산합니다.
- */
-export function splitBill(totalAmount: number, headcount: number): BillSplit {
-  const perPerson = amountPerPerson(totalAmount, headcount);
-  const payerCount = Math.max(0, headcount - 1); // 파티장 한 명을 뺍니다
-  const collected = perPerson * payerCount;
-
-  return {
-    perPerson,
-    payerCount,
-    collected,
-    organizerShare: totalAmount - collected,
-  };
 }
 
 /** 12345 → "12,345" */

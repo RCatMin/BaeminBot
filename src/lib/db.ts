@@ -156,8 +156,10 @@ function migrate(database: DatabaseSync): void {
       pot_id        INTEGER NOT NULL REFERENCES pots(id) ON DELETE CASCADE,
       slack_user_id TEXT NOT NULL,
       joined_at     TEXT NOT NULL,
+      amount        INTEGER,            -- 이 사람이 보내야 할 금액. 정산 시작할 때 채워집니다.
       paid          INTEGER NOT NULL DEFAULT 0,  -- 0=미입금, 1=입금완료
       paid_at       TEXT,
+      disputed      INTEGER NOT NULL DEFAULT 0,  -- 0=평범, 1="금액이 이상해요" 신고 중
       dm_channel_id TEXT,               -- 정산 DM을 보낸 대화방 주소
       dm_ts         TEXT,               -- 정산 DM 메시지 주소 (입금 완료 시 메시지를 수정하려고 저장)
       PRIMARY KEY (pot_id, slack_user_id)
@@ -166,6 +168,19 @@ function migrate(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_pots_status ON pots(status);
     CREATE INDEX IF NOT EXISTS idx_participants_pot ON participants(pot_id);
   `);
+
+  // 이미 만들어져 있던 DB에는 CREATE TABLE IF NOT EXISTS가 새 칸을 더해주지 않으므로,
+  // 없을 때만 직접 추가합니다. (매번 실행돼도 이미 있으면 그냥 넘어갑니다)
+  ensureColumn(database, 'participants', 'amount', 'amount INTEGER');
+  ensureColumn(database, 'participants', 'disputed', 'disputed INTEGER NOT NULL DEFAULT 0');
+}
+
+/** 테이블에 그 칸이 없으면 추가합니다. 옛날 DB를 새 스키마로 조용히 맞춰줍니다. */
+function ensureColumn(database: DatabaseSync, table: string, column: string, ddl: string): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
 }
 
 /** 지금 시각을 DB에 저장할 문자열(ISO)로 만듭니다. */

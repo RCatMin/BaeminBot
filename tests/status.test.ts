@@ -48,9 +48,19 @@ describe('상태 전이 규칙', () => {
     assert.ok(!canTransition(POT_STATUS.SETTLED, POT_STATUS.CANCELLED));
   });
 
+  test('정산 완료는 정산 마무리로 넘어갈 수 있다', () => {
+    assert.ok(canTransition(POT_STATUS.SETTLED, POT_STATUS.FINALIZED));
+  });
+
   test('취소된 팟은 되살릴 수 없다', () => {
     for (const to of STATUS_ORDER) {
       assert.ok(!canTransition(POT_STATUS.CANCELLED, to), `CANCELLED → ${to} 는 막혀야 함`);
+    }
+  });
+
+  test('마무리된 팟은 어디로도 넘어갈 수 없다 — 완전히 끝난 상태', () => {
+    for (const to of [...STATUS_ORDER, POT_STATUS.CANCELLED, POT_STATUS.FINALIZED]) {
+      assert.ok(!canTransition(POT_STATUS.FINALIZED, to), `FINALIZED → ${to} 는 막혀야 함`);
     }
   });
 });
@@ -62,8 +72,12 @@ describe('다음 단계 안내', () => {
     assert.equal(nextStatus(POT_STATUS.SETTLING), POT_STATUS.SETTLED);
   });
 
+  test('정산 완료 다음은 정산 마무리다', () => {
+    assert.equal(nextStatus(POT_STATUS.SETTLED), POT_STATUS.FINALIZED);
+  });
+
   test('끝난 상태에는 다음이 없다', () => {
-    assert.equal(nextStatus(POT_STATUS.SETTLED), null);
+    assert.equal(nextStatus(POT_STATUS.FINALIZED), null);
     assert.equal(nextStatus(POT_STATUS.CANCELLED), null);
   });
 });
@@ -76,6 +90,10 @@ describe('진행률 표시', () => {
     assert.equal(statusStep(POT_STATUS.SETTLED), 4);
   });
 
+  test('정산 마무리는 새 단계가 아니라 정산 완료와 같은 4번째로 센다', () => {
+    assert.equal(statusStep(POT_STATUS.FINALIZED), 4);
+  });
+
   test('취소됨은 흐름 밖이라 0 — 화면에서 진행 막대 대신 문구를 띄우는 근거', () => {
     assert.equal(statusStep(POT_STATUS.CANCELLED), 0);
   });
@@ -83,13 +101,15 @@ describe('진행률 표시', () => {
   test('진행 막대에는 4단계만 들어간다', () => {
     assert.equal(STATUS_ORDER.length, 4);
     assert.ok(!STATUS_ORDER.includes(POT_STATUS.CANCELLED));
+    assert.ok(!STATUS_ORDER.includes(POT_STATUS.FINALIZED));
   });
 });
 
 describe('끝난 상태 판별', () => {
-  test('정산 완료와 취소됨만 끝난 상태', () => {
-    assert.ok(isFinished(POT_STATUS.SETTLED));
+  test('정산 마무리와 취소됨만 끝난 상태 — 정산 완료는 아직 되돌릴 수 있어서 제외', () => {
+    assert.ok(isFinished(POT_STATUS.FINALIZED));
     assert.ok(isFinished(POT_STATUS.CANCELLED));
+    assert.ok(!isFinished(POT_STATUS.SETTLED));
     assert.ok(!isFinished(POT_STATUS.RECRUITING));
     assert.ok(!isFinished(POT_STATUS.CLOSED));
     assert.ok(!isFinished(POT_STATUS.SETTLING));
