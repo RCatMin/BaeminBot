@@ -1,0 +1,601 @@
+<title>밥머거 사용설명서</title>
+<style>
+  :root {
+    --bg-app: #f2f2f7;
+    --bg-card: #ffffff;
+    --bg-card-sunken: #f7f7f9;
+    --text-primary: #1c1c1e;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #aeaeb2;
+    --border: #e5e5ea;
+    --accent: #007aff;
+    --accent-soft: #e8f1ff;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 10px rgba(0, 0, 0, 0.04);
+
+    --blue-bg: #eaf2ff; --blue-fg: #1d6fe0;
+    --amber-bg: #fdf1e0; --amber-fg: #b06a00;
+    --emerald-bg: #e4f7ee; --emerald-fg: #0f9d58;
+    --violet-bg: #f1ecfd; --violet-fg: #7c4fe0;
+    --red-bg: #fde9e9; --red-fg: #d0342c;
+    --gray-bg: #eeeef1; --gray-fg: #6e6e73;
+
+    --slack-bg: #ffffff;
+    --slack-border: #dddfe2;
+    --slack-text: #1d1c1d;
+    --slack-sub: #616061;
+    --slack-btn-bg: #fafafa;
+    --slack-btn-border: #b2b6ba;
+    --slack-btn-primary-bg: #007a5a;
+    --slack-btn-danger-bg: #e01e5a;
+
+    color-scheme: light dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-app: #000000;
+      --bg-card: #1c1c1e;
+      --bg-card-sunken: #141416;
+      --text-primary: #f2f2f7;
+      --text-secondary: #98989d;
+      --text-tertiary: #636366;
+      --border: #38383a;
+      --accent: #0a84ff;
+      --accent-soft: rgba(10, 132, 255, 0.16);
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 10px rgba(0, 0, 0, 0.35);
+
+      --blue-bg: rgba(59, 130, 246, 0.16); --blue-fg: #6ea8fe;
+      --amber-bg: rgba(245, 158, 11, 0.16); --amber-fg: #f0b429;
+      --emerald-bg: rgba(16, 185, 129, 0.16); --emerald-fg: #34d399;
+      --violet-bg: rgba(139, 92, 246, 0.18); --violet-fg: #b794f6;
+      --red-bg: rgba(239, 68, 68, 0.16); --red-fg: #f87171;
+      --gray-bg: rgba(255, 255, 255, 0.06); --gray-fg: #98989d;
+
+      --slack-bg: #222529;
+      --slack-border: #3b3d40;
+      --slack-text: #d1d2d3;
+      --slack-sub: #9a9ba0;
+      --slack-btn-bg: #2b2d31;
+      --slack-btn-border: #565a5e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg-app: #000000; --bg-card: #1c1c1e; --bg-card-sunken: #141416;
+    --text-primary: #f2f2f7; --text-secondary: #98989d; --text-tertiary: #636366;
+    --border: #38383a; --accent: #0a84ff; --accent-soft: rgba(10, 132, 255, 0.16);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 10px rgba(0, 0, 0, 0.35);
+    --blue-bg: rgba(59, 130, 246, 0.16); --blue-fg: #6ea8fe;
+    --amber-bg: rgba(245, 158, 11, 0.16); --amber-fg: #f0b429;
+    --emerald-bg: rgba(16, 185, 129, 0.16); --emerald-fg: #34d399;
+    --violet-bg: rgba(139, 92, 246, 0.18); --violet-fg: #b794f6;
+    --red-bg: rgba(239, 68, 68, 0.16); --red-fg: #f87171;
+    --gray-bg: rgba(255, 255, 255, 0.06); --gray-fg: #98989d;
+    --slack-bg: #222529; --slack-border: #3b3d40; --slack-text: #d1d2d3; --slack-sub: #9a9ba0;
+    --slack-btn-bg: #2b2d31; --slack-btn-border: #565a5e;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg-app: #f2f2f7; --bg-card: #ffffff; --bg-card-sunken: #f7f7f9;
+    --text-primary: #1c1c1e; --text-secondary: #6e6e73; --text-tertiary: #aeaeb2;
+    --border: #e5e5ea; --accent: #007aff; --accent-soft: #e8f1ff;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 10px rgba(0, 0, 0, 0.04);
+    --blue-bg: #eaf2ff; --blue-fg: #1d6fe0;
+    --amber-bg: #fdf1e0; --amber-fg: #b06a00;
+    --emerald-bg: #e4f7ee; --emerald-fg: #0f9d58;
+    --violet-bg: #f1ecfd; --violet-fg: #7c4fe0;
+    --red-bg: #fde9e9; --red-fg: #d0342c;
+    --gray-bg: #eeeef1; --gray-fg: #6e6e73;
+    --slack-bg: #ffffff; --slack-border: #dddfe2; --slack-text: #1d1c1d; --slack-sub: #616061;
+    --slack-btn-bg: #fafafa; --slack-btn-border: #b2b6ba;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg-app);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: 22px;
+    box-shadow: var(--shadow-card);
+    padding: 24px;
+  }
+
+  /* ── 히어로 ── */
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .hero-icon {
+    flex-shrink: 0;
+    width: 56px; height: 56px;
+    border-radius: 18px;
+    background: var(--bg-card);
+    box-shadow: var(--shadow-card);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .hero h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .hero p { margin-top: 4px; font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+  .lede {
+    margin-top: 22px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text-secondary);
+    max-width: 62ch;
+  }
+  .lede strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ── 한눈에 보기 칩 ── */
+  .quick-row {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .quick-chip {
+    background: var(--bg-card);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .quick-chip .emoji { font-size: 20px; }
+  .quick-chip .label { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 600; }
+
+  /* ── 섹션 공통 ── */
+  section { margin-top: 44px; }
+  .section-eyebrow {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .section-title {
+    margin-top: 6px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .section-desc {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+
+  /* ── 진행 흐름 트래커 (대시보드와 동일한 시각 언어) ── */
+  .tracker {
+    margin-top: 28px;
+    display: flex;
+    gap: 6px;
+  }
+  .tracker .seg { flex: 1; }
+  .tracker .bar { height: 6px; border-radius: 999px; background: var(--border); }
+  .tracker .bar.done { background: var(--accent); }
+  .tracker .seg-label {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--text-tertiary);
+    text-align: center;
+  }
+  .tracker .seg.current .bar { background: var(--accent); }
+  .tracker .seg.current .seg-label { color: var(--accent); font-weight: 700; }
+
+  /* ── 단계 카드 ── */
+  .step {
+    margin-top: 16px;
+    padding: 22px;
+  }
+  .step-head { display: flex; align-items: baseline; gap: 10px; }
+  .step-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .step-title { font-size: 16.5px; font-weight: 700; }
+  .step-body { margin-top: 10px; font-size: 14px; line-height: 1.7; color: var(--text-secondary); }
+  .step-body strong { color: var(--text-primary); font-weight: 600; }
+  .step-body code {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .step-note {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    line-height: 1.6;
+    padding-left: 14px;
+    border-left: 2px solid var(--border);
+  }
+
+  /* ── 슬랙 메시지 목업 ── */
+  .slack-caption {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .slack-mock {
+    margin-top: 8px;
+    background: var(--slack-bg);
+    border: 1px solid var(--slack-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--slack-text);
+    line-height: 1.55;
+  }
+  .slack-mock .m-title { font-weight: 700; font-size: 14.5px; }
+  .slack-mock .m-track { margin-top: 8px; font-size: 12px; color: var(--slack-sub); }
+  .slack-mock .m-track b { color: var(--slack-text); }
+  .slack-mock .m-row { margin-top: 8px; color: var(--slack-sub); }
+  .slack-mock .m-row b { color: var(--slack-text); font-weight: 600; }
+  .slack-mock hr { border: none; border-top: 1px solid var(--slack-border); margin: 10px 0; }
+  .slack-btns { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .slack-btn {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--slack-btn-border);
+    background: var(--slack-btn-bg);
+    color: var(--slack-text);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .slack-btn.primary { background: var(--slack-btn-primary-bg); border-color: var(--slack-btn-primary-bg); color: #fff; }
+  .slack-btn.danger { background: var(--slack-btn-danger-bg); border-color: var(--slack-btn-danger-bg); color: #fff; }
+
+  /* ── 배지 ── */
+  .badge {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .b-recruiting { background: var(--blue-bg); color: var(--blue-fg); }
+  .b-closed { background: var(--amber-bg); color: var(--amber-fg); }
+  .b-settling { background: var(--accent-soft); color: var(--accent); }
+  .b-settled { background: var(--emerald-bg); color: var(--emerald-fg); }
+  .b-finalized { background: var(--violet-bg); color: var(--violet-fg); }
+  .b-cancelled { background: var(--gray-bg); color: var(--gray-fg); }
+
+  /* ── 그룹 리스트 (iOS 설정 스타일) ── */
+  .group-list { padding: 4px 0; }
+  .list-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .list-row:last-child { border-bottom: none; }
+  .list-row .chip {
+    flex-shrink: 0;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+  .list-row .desc { font-size: 13.5px; color: var(--text-secondary); line-height: 1.55; padding-top: 3px; }
+  .list-row .desc strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ── FAQ (아코디언) ── */
+  .faq-item { border-bottom: 1px solid var(--border); }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-q {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 17px 20px;
+    cursor: pointer;
+    font-size: 14.5px;
+    font-weight: 600;
+    list-style: none;
+  }
+  .faq-q::-webkit-details-marker { display: none; }
+  .faq-q .chev { color: var(--text-tertiary); font-size: 13px; transition: transform 0.18s ease; flex-shrink: 0; }
+  details[open] .faq-q .chev { transform: rotate(180deg); }
+  .faq-a { padding: 0 20px 18px; font-size: 13.5px; line-height: 1.7; color: var(--text-secondary); }
+  .faq-a strong { color: var(--text-primary); font-weight: 600; }
+
+  footer {
+    margin-top: 56px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 460px) {
+    .quick-row { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .card, .step { padding: 18px; border-radius: 18px; }
+  }
+</style>
+
+<main>
+
+  <div class="card hero">
+    <div class="hero-icon">🍚</div>
+    <div>
+      <h1>밥머거 사용설명서</h1>
+      <p>슬랙에서 점심팟 모집부터 정산까지, 총무 없이도 알아서 굴러가게 해주는 봇이에요.</p>
+    </div>
+  </div>
+
+  <p class="lede">
+    이 문서는 <strong>슬랙을 처음 써보는 분도 그대로 따라 할 수 있게</strong> 만들었어요.
+    아래 순서대로 한 번만 훑어보시면, 실제로 팟을 만들고 정산까지 끝내는 데
+    막히는 부분이 없을 거예요.
+  </p>
+
+  <div class="quick-row">
+    <div class="quick-chip"><div class="emoji">🍚</div><span class="label">팟 모집</span></div>
+    <div class="quick-chip"><div class="emoji">💸</div><span class="label">금액별 정산</span></div>
+    <div class="quick-chip"><div class="emoji">📊</div><span class="label">대시보드로 확인</span></div>
+  </div>
+
+  <!-- ───────────────────────── 전체 흐름 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">전체 흐름</p>
+    <h2 class="section-title">팟 하나가 이렇게 굴러가요</h2>
+    <p class="section-desc">
+      모든 점심팟은 이 네 단계를 순서대로 지나갑니다. 지금 팟이 어디쯤 와 있는지는
+      슬랙 메시지 안의 이 막대만 보면 바로 알 수 있어요.
+    </p>
+
+    <div class="tracker">
+      <div class="seg"><div class="bar done"></div><div class="seg-label">모집중</div></div>
+      <div class="seg"><div class="bar done"></div><div class="seg-label">모집 완료</div></div>
+      <div class="seg"><div class="bar done"></div><div class="seg-label">정산 중</div></div>
+      <div class="seg current"><div class="bar done"></div><div class="seg-label">정산 완료</div></div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 1단계 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">1단계</p>
+    <h2 class="section-title">팟 만들고 사람 모으기</h2>
+
+    <div class="card step">
+      <div class="step-head">
+        <span class="step-num">START</span>
+        <span class="step-title">아무 채널에서나 <code>/모여라</code> 또는 <code>/밥먹자</code></span>
+      </div>
+      <div class="step-body">
+        입력하면 입력창(모달)이 하나 뜹니다. <strong>뭘 먹을지</strong>, <strong>장소(1F / B1)</strong>,
+        시간, 정원을 적고 제출하면 끝이에요. 계좌는 지금 안 적어도 되고, 정산할 때 물어봅니다.
+      </div>
+      <div class="step-note">
+        이미 계좌를 등록해둔 사람은 이 칸이 자동으로 채워져 있어요. (아래 "계좌 미리 등록하기" 참고)
+      </div>
+    </div>
+
+    <p class="slack-caption">제출하면 채널에 이런 메시지가 올라와요.</p>
+    <div class="slack-mock">
+      <div class="m-title">🍚 김치찌개 먹으러 갈 사람</div>
+      <div class="m-track"><b>모집중</b> ─ 모집 완료 ─ 정산 중 ─ 정산 완료</div>
+      <hr>
+      <div class="m-row"><b>파티장</b> @민수 &nbsp; <b>장소</b> 1F &nbsp; <b>시간</b> 12:10 &nbsp; <b>인원</b> 2/5명</div>
+      <div class="m-row"><b>참여자</b> @민수, @지훈</div>
+      <div class="slack-btns">
+        <span class="slack-btn primary">🙋 참여할게요</span>
+        <span class="slack-btn">빠질게요</span>
+        <span class="slack-btn">🔒 모집 마감 (파티장)</span>
+        <span class="slack-btn">🚫 팟 취소 (파티장)</span>
+      </div>
+    </div>
+    <div class="step-note" style="margin-top: 14px;">
+      같이 갈 사람은 <strong>🙋 참여할게요</strong>만 누르면 끝. 나중에 마음이 바뀌면
+      <strong>빠질게요</strong>로 취소할 수 있어요 (모집이 끝나기 전까지만).
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 2단계 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">2단계 · 파티장만</p>
+    <h2 class="section-title">모집 마감하기</h2>
+    <div class="card step">
+      <div class="step-body">
+        사람이 다 모였으면 파티장이 <strong>🔒 모집 마감</strong>을 누르세요. 그 순간 인원이 확정되고,
+        더 이상 새로 들어오거나 빠질 수 없어요. <span class="badge b-recruiting">모집중</span> 이
+        <span class="badge b-closed">모집 완료</span> 로 바뀝니다.
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 3단계 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">3단계 · 파티장만</p>
+    <h2 class="section-title">정산 시작하기 — 사람마다 금액이 달라도 OK</h2>
+    <div class="card step">
+      <div class="step-body">
+        <strong>💸 정산 시작</strong>을 누르면, 파티장 자신을 뺀 참여자 <strong>한 명 한 명마다
+        얼마를 보내야 하는지</strong> 직접 적는 창이 뜹니다. 메뉴가 다 달라서 금액도 다르다면
+        여기서 그대로 다르게 입력하면 돼요 — 다 같은 값으로 나눌 필요 없습니다.
+        마지막에 입금받을 <strong>계좌(은행·계좌번호·예금주)</strong>도 함께 적습니다.
+      </div>
+      <div class="step-note">
+        제출하는 순간 참여자 <strong>각자에게 개인 DM</strong>으로 본인 몫과 계좌번호가 자동으로 갑니다.
+        채널에는 총액만 공개되고, 개인 DM 내용은 본인만 봅니다.
+      </div>
+    </div>
+
+    <p class="slack-caption">참여자가 받는 정산 DM은 이렇게 생겼어요.</p>
+    <div class="slack-mock">
+      <div class="m-title">💸 김치찌개 먹으러 갈 사람 정산 안내</div>
+      <div class="m-row">@민수 님이 정산을 시작했어요.</div>
+      <div class="m-row"><b>보낼 금액</b> 15,000원</div>
+      <div class="m-row"><b>입금 계좌</b> 카카오뱅크 3333-01-1234567</div>
+      <div class="slack-btns">
+        <span class="slack-btn primary">✅ 입금했어요</span>
+        <span class="slack-btn danger">⚠️ 이상해요!</span>
+      </div>
+    </div>
+    <div class="step-note" style="margin-top: 14px;">
+      돈을 보냈으면 <strong>✅ 입금했어요</strong>를 누르면 됩니다. 그런데 만약
+      <strong>금액이 잘못된 것 같으면</strong> <strong>⚠️ 이상해요!</strong> 를 눌러주세요 —
+      바로 파티장에게 "○○님이 금액이 이상하다고 알려왔어요"라는 알림이 갑니다.
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 4단계 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">4단계</p>
+    <h2 class="section-title">정산 완료, 그리고 마무리</h2>
+    <div class="card step">
+      <div class="step-body">
+        참여자 전원이 <strong>✅ 입금했어요</strong>를 누르면 자동으로
+        <span class="badge b-settled">정산 완료</span> 로 바뀝니다. 현금으로 직접 받는 등
+        특별한 사정이 있으면 파티장이 <strong>✅ 정산 완료 처리</strong>로 수동으로 끝낼 수도 있어요.
+      </div>
+      <div class="step-note">
+        여기서 버튼이 두 개 남습니다 — <strong>🔄 정산 다시 열기</strong> (누가 잘못 눌렀거나
+        금액을 고쳐야 할 때) 와 <strong>🏁 정산 마무리</strong> (진짜 다 끝났을 때).
+        <strong>정산 마무리를 누르면 그때부터는 되돌릴 수 없고</strong>, 시간이 지나면 계좌번호도
+        자동으로 지워집니다. 헷갈리면 다시 열기부터 눌러보고, 확실할 때만 마무리하세요.
+      </div>
+    </div>
+
+    <div class="quick-row" style="grid-template-columns: 1fr 1fr;">
+      <div class="quick-chip"><span class="badge b-settled" style="margin-bottom:6px;">정산 완료</span><span class="label">아직 되돌릴 수 있어요</span></div>
+      <div class="quick-chip"><span class="badge b-finalized" style="margin-bottom:6px;">정산 마무리</span><span class="label">완전히 끝, 되돌릴 수 없어요</span></div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 취소 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">언제든지</p>
+    <h2 class="section-title">팟을 취소하고 싶다면</h2>
+    <div class="card step">
+      <div class="step-body">
+        정산 완료 전까지는(모집중이든 정산 중이든) 파티장이 <strong>🚫 팟 취소</strong>를 눌러
+        언제든 접을 수 있어요. <span class="badge b-cancelled">취소됨</span> 으로 표시되고
+        기록은 남지만, 아무도 입금할 필요가 없다는 안내가 참여자에게 자동으로 갑니다.
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 계좌 등록 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">한 번만 해두면 편해요</p>
+    <h2 class="section-title">계좌 미리 등록하기</h2>
+    <div class="card step">
+      <div class="step-body">
+        아무 채널에서나 <code>/계좌등록</code> 을 입력하면 내 계좌를 저장해둘 수 있어요.
+        한 번 저장해두면, 다음 팟을 만들거나 정산을 시작할 때마다 계좌 칸이 자동으로 채워집니다.
+      </div>
+      <div class="step-note">
+        저장은 항상 <strong>동의를 물어본 뒤에만</strong> 됩니다 — 정산 시작 화면에도
+        "이 계좌를 저장해서 다음에도 자동으로 채우기" 체크박스가 따로 있고, 체크해야만 저장돼요.
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 명령어 요약 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">참고</p>
+    <h2 class="section-title">명령어 모아보기</h2>
+    <div class="card group-list">
+      <div class="list-row">
+        <span class="chip">/모여라</span>
+        <span class="desc"><strong>점심팟 새로 만들기.</strong> <code>/밥먹자</code>, <code>/eat</code> 도 똑같이 동작해요.</span>
+      </div>
+      <div class="list-row">
+        <span class="chip">/계좌등록</span>
+        <span class="desc"><strong>내 계좌 저장해두기.</strong> <code>/account</code> 도 똑같이 동작해요.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 대시보드 ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">전체 현황이 궁금하면</p>
+    <h2 class="section-title">밥머거 대시보드</h2>
+    <p class="section-desc">
+      슬랙 밖에서 지금까지의 모든 팟과 정산 현황을 한눈에 볼 수 있는 화면이에요. 버튼을 누르는
+      곳은 아니고, 보기만 하는 화면입니다 — 상태를 바꾸려면 슬랙에서 조작해야 해요.
+    </p>
+    <div class="card group-list" style="margin-top: 16px;">
+      <div class="list-row">
+        <span class="chip">📅</span>
+        <span class="desc"><strong>날짜별로 보기.</strong> 달력에서 원하는 날짜를 고르면 그날 있었던 팟만 볼 수 있어요.</span>
+      </div>
+      <div class="list-row">
+        <span class="chip">🌗</span>
+        <span class="desc"><strong>라이트/다크 모드.</strong> 오른쪽 위 동그란 버튼으로 화면 밝기를 직접 고를 수 있어요.</span>
+      </div>
+      <div class="list-row">
+        <span class="chip">🔄</span>
+        <span class="desc"><strong>자동 갱신.</strong> 30초마다 저절로 새로고침돼서, 계속 눌러볼 필요 없어요.</span>
+      </div>
+    </div>
+    <p class="section-desc" style="margin-top: 14px;">대시보드 주소는 봇 관리자에게 물어보세요.</p>
+  </section>
+
+  <!-- ───────────────────────── FAQ ───────────────────────── -->
+  <section>
+    <p class="section-eyebrow">궁금할 만한 것들</p>
+    <h2 class="section-title">자주 묻는 질문</h2>
+    <div class="card" style="padding: 4px 0;">
+      <details class="faq-item">
+        <summary class="faq-q">입금했다고 잘못 눌렀어요, 되돌릴 수 있나요?<span class="chev">▾</span></summary>
+        <div class="faq-a">네. DM에 뜬 <strong>↩️ 잘못 눌렀어요</strong> 버튼을 누르면 바로 취소돼요.
+          다만 <strong>전원 입금</strong>으로 인식돼서 이미 정산 완료로 넘어갔다면, 파티장에게
+          <strong>🔄 정산 다시 열기</strong>를 부탁한 뒤에 되돌리면 됩니다.</div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">비공개 채널에서도 쓸 수 있나요?<span class="chev">▾</span></summary>
+        <div class="faq-a">네, 되지만 그 채널에 봇을 먼저 초대해야 해요. 채널에서
+          <code>/invite @밥머거</code> 를 입력하면 됩니다. 초대 안 하고 커맨드를 치면
+          "채널에 메시지를 올리지 못했어요"라는 안내 DM이 옵니다.</div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">여러 명이 있는 그룹 DM에서도 쓸 수 있나요?<span class="chev">▾</span></summary>
+        <div class="faq-a">그건 안 돼요 — 슬랙 자체가 앱을 그룹 DM에 초대하는 걸 지원하지 않아요.
+          대신 그 인원들끼리 <strong>채널</strong>을 하나 만들어서 거기에 봇을 초대하면
+          완전히 같은 방식으로 쓸 수 있습니다.</div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">계좌번호가 계속 남아있는 건 아니겠죠?<span class="chev">▾</span></summary>
+        <div class="faq-a">네, 안전하게 처리됩니다. 계좌는 <strong>내가 동의했을 때만</strong> 저장되고,
+          팟이 <strong>🏁 정산 마무리</strong>된 뒤 일정 시간이 지나면 그 팟에 쓰였던 계좌번호는
+          자동으로 지워집니다.</div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-q">버튼을 눌렀는데 아무 반응이 없어요.<span class="chev">▾</span></summary>
+        <div class="faq-a">봇이 잠깐 꺼져 있을 수 있어요. 잠시 후 다시 눌러보시고, 계속 그러면
+          봇을 관리하는 사람에게 알려주세요.</div>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    🍚 밥머거 — 점심팟 모집부터 정산까지
+  </footer>
+
+</main>
