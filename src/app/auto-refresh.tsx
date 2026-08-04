@@ -30,7 +30,7 @@ export function AutoRefresh({ intervalMs }: { intervalMs: number }) {
   const seconds = Math.round(intervalMs / 1000);
 
   return (
-    <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+    <p className="flex items-center gap-1.5 text-[13px] text-tertiary">
       {/* 살아 있다는 표시로 깜빡이는 점 */}
       <span className="relative flex h-1.5 w-1.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />

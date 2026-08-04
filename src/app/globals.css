@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
+/*
+ * 색상·글꼴을 변수(토큰) 하나로 모아둡니다.
+ * 화면 곳곳에서 "dark:" 를 따로따로 붙이는 대신 변수만 바꾸면
+ * 라이트/다크 두 모드가 한 번에 맞춰집니다.
+ *
+ * 값은 iOS/One UI의 "설정" 화면 느낌을 참고했습니다:
+ *   배경은 살짝 톤 다운된 무채색, 카드는 배경보다 밝게(라이트) 또는
+ *   살짝 밝게(다크) 띄우고, 그림자 대신 옅은 경계선으로 구분합니다.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg-app: #f2f2f7;
+  --bg-card: #ffffff;
+  --text-primary: #1c1c1e;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #aeaeb2;
+  --border: #e5e5ea;
+  --accent: #007aff;
+  --accent-soft: #e8f1ff;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 8px rgba(0, 0, 0, 0.03);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-app: #000000;
+    --bg-card: #1c1c1e;
+    --text-primary: #f2f2f7;
+    --text-secondary: #98989d;
+    --text-tertiary: #636366;
+    --border: #38383a;
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.16);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 8px rgba(0, 0, 0, 0.3);
   }
 }
 
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-card: var(--bg-card);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+}
+
+/*
+ * color-scheme 을 알려주면, <select>·달력·스크롤바 같은 브라우저 기본
+ * 부품도 다크 모드에서 알아서 어울리는 색으로 바뀝니다.
+ */
+:root {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  /*
+   * Arial로 고정하지 않고 시스템 글꼴을 그대로 씁니다.
+   * 아이폰·맥에서는 San Francisco, 갤럭시(One UI)·안드로이드에서는 그 기기의
+   * 기본 글꼴이 그대로 나와서, 어떤 기기로 봐도 "그 기기에 원래 있던 화면"처럼
+   * 보입니다.
+   */
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }

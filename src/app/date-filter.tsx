@@ -30,15 +30,15 @@ export function DateFilter({
   const router = useRouter();
 
   return (
-    <label className="mt-3 flex items-center gap-2 text-sm">
-      <span className="text-slate-500 dark:text-slate-400">날짜별 보기</span>
+    <label className="flex items-center gap-2 whitespace-nowrap text-[13px]">
+      <span className="text-secondary">날짜별 보기</span>
       <select
         value={selected ?? 'all'}
         onChange={(e) => {
           const value = e.target.value;
           router.push(value === 'all' ? '/' : `/?date=${value}`);
         }}
-        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="rounded-xl border border-line bg-card px-3 py-1.5 text-primary outline-none focus:border-accent"
       >
         <option value="all">전체 보기</option>
         {dates.map((d) => (
