@@ -1,0 +1,116 @@
+<meta charset="utf-8">
+<title>밥머거 — 공유 썸네일</title>
+<style>
+  html, body {
+    width: 1200px;
+    height: 630px;
+    margin: 0;
+    overflow: hidden;
+  }
+  * { box-sizing: border-box; }
+
+  body {
+    position: relative;
+    background:
+      radial-gradient(760px 460px at 84% -8%, rgba(10, 132, 255, 0.30), transparent 60%),
+      radial-gradient(620px 460px at -6% 112%, rgba(124, 79, 224, 0.22), transparent 60%),
+      #000000;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color: #f2f2f7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 아주 옅은 격자 — 배경에 깊이감만 살짝 준다 */
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(760px 630px at 30% 40%, black, transparent 75%);
+  }
+
+  .stage {
+    position: relative;
+    height: 100%;
+    padding: 76px 84px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .icon {
+    width: 128px;
+    height: 128px;
+    border-radius: 34px;
+    background: linear-gradient(160deg, #1c1c1e, #0c0c0e);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 66px;
+  }
+
+  h1 {
+    margin: 34px 0 0;
+    font-size: 92px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  .tagline {
+    margin: 20px 0 0;
+    font-size: 30px;
+    font-weight: 500;
+    color: rgba(242, 242, 247, 0.62);
+    letter-spacing: -0.005em;
+  }
+
+  .chips {
+    margin-top: 44px;
+    display: flex;
+    gap: 14px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 22px;
+    border-radius: 999px;
+    font-size: 24px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .chip.c1 { background: rgba(59, 130, 246, 0.16); color: #7db2ff; }
+  .chip.c2 { background: rgba(10, 132, 255, 0.18); color: #6ea8fe; }
+  .chip.c3 { background: rgba(139, 92, 246, 0.20); color: #c3aafb; }
+
+  .brandline {
+    position: absolute;
+    right: 84px;
+    bottom: 64px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(242, 242, 247, 0.34);
+  }
+</style>
+
+<div class="grid"></div>
+<div class="stage">
+  <div class="icon">🍚</div>
+  <h1>밥머거</h1>
+  <p class="tagline">슬랙에서 점심팟 모집부터 정산까지, 총무 없이 알아서</p>
+
+  <div class="chips">
+    <span class="chip c1">🍚&nbsp;모집</span>
+    <span class="chip c2">💸&nbsp;정산</span>
+    <span class="chip c3">🏁&nbsp;마무리</span>
+  </div>
+
+  <div class="brandline">밥머거 사용설명서</div>
+</div>
