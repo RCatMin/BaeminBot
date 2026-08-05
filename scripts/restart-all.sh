@@ -4,6 +4,11 @@
 
 set -e
 
+# Finder에서 앱 아이콘으로 실행되면 터미널과 달리 PATH가 최소한으로만 잡혀 있어서
+# npm을 못 찾고 조용히 실패합니다 (nohup: npm: No such file or directory).
+# Homebrew 설치 경로를 직접 더해서 그 문제를 막습니다.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 PROJECT_DIR="/Users/stupidcatspring/Desktop/Dev/Vive/BaeminBot"
 LOG_DIR="$PROJECT_DIR/data/logs"
 mkdir -p "$LOG_DIR"
