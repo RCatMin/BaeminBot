@@ -19,6 +19,7 @@ function potCreatedAt(title: string, utcIso: string) {
   const pot = P.createPot({
     channelId: 'C_TEST',
     organizerId: 'U_LEADER',
+    potType: P.POT_TYPE.DELIVERY,
     title,
     place: '1F',
     meetAt: '12:00',

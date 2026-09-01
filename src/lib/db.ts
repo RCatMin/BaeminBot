@@ -138,8 +138,9 @@ function migrate(database: DatabaseSync): void {
       channel_id     TEXT NOT NULL,
       message_ts     TEXT,               -- 모집 메시지의 타임스탬프(=주소). 버튼 눌릴 때 이 메시지를 수정합니다.
       organizer_id   TEXT NOT NULL,      -- 파티장(팟을 만든 사람)의 슬랙 ID
+      pot_type       TEXT NOT NULL DEFAULT 'DELIVERY',  -- DELIVERY(배달) | DINE_OUT(외식) — pots.ts 의 POT_TYPE
       title          TEXT NOT NULL,      -- 예: "김치찌개 먹으러 갈 사람"
-      place          TEXT,               -- 모이는 장소. '1F' 또는 'B1' (blocks.ts 의 PLACES)
+      place          TEXT,               -- 배달: '1F'/'B1' 중 선택. 외식: 가게 이름·주소 자유 입력
       meet_at        TEXT,               -- 모이는 시간만 (자유 입력, 예: "12:10")
       capacity       INTEGER NOT NULL DEFAULT 0,  -- 정원. 0이면 무제한
       status         TEXT NOT NULL,      -- RECRUITING | CLOSED | SETTLING | SETTLED
@@ -173,6 +174,7 @@ function migrate(database: DatabaseSync): void {
   // 없을 때만 직접 추가합니다. (매번 실행돼도 이미 있으면 그냥 넘어갑니다)
   ensureColumn(database, 'participants', 'amount', 'amount INTEGER');
   ensureColumn(database, 'participants', 'disputed', 'disputed INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(database, 'pots', 'pot_type', "pot_type TEXT NOT NULL DEFAULT 'DELIVERY'");
 }
 
 /** 테이블에 그 칸이 없으면 추가합니다. 옛날 DB를 새 스키마로 조용히 맞춰줍니다. */

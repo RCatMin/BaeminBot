@@ -21,6 +21,7 @@ import {
   ACCOUNT_FIELDS,
   ACTION,
   FIELD,
+  POT_TYPE_LABEL,
   VIEW,
   amountBlockId,
   createPotModal,
@@ -48,6 +49,7 @@ import {
   listUnnamedUserIds,
   markDisputed,
   markPaid,
+  POT_TYPE,
   purgeFinishedAccounts,
   rememberUserName,
   reopenSettlement,
@@ -58,6 +60,7 @@ import {
   type Account,
   type ParticipantAmount,
   type Pot,
+  type PotType,
 } from '../src/lib/pots.ts';
 import { POT_STATUS, STATUS_LABEL } from '../src/lib/status.ts';
 
@@ -319,7 +322,22 @@ for (const commandName of LUNCH_COMMANDS) {
 
     await client.views.open({
       trigger_id: command.trigger_id,
-      view: createPotModal(command.channel_id, getAccount(command.user_id)),
+      view: createPotModal(POT_TYPE.DELIVERY, command.channel_id, getAccount(command.user_id)),
+    });
+  });
+}
+
+/**
+ * /외식 — 배달과 흐름은 똑같고, 장소만 층 선택 대신 가게 이름·주소를 직접 적습니다.
+ * 같은 모달(createPotModal)과 같은 제출 핸들러(VIEW.CREATE_POT)를 kind로 나눠 씁니다.
+ */
+for (const commandName of DINE_OUT_COMMANDS) {
+  app.command(commandName, async ({ command, ack, client }) => {
+    await ack();
+
+    await client.views.open({
+      trigger_id: command.trigger_id,
+      view: createPotModal(POT_TYPE.DINE_OUT, command.channel_id, getAccount(command.user_id)),
     });
   });
 }
@@ -348,7 +366,11 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
 
   await ack();
 
-  const channelId = view.private_metadata; // 모달을 연 채널을 기억해뒀던 값
+  // 모달을 열 때 어느 채널·어느 종류(배달/외식)인지 함께 실어 보내뒀던 값
+  const { channelId, potType } = JSON.parse(view.private_metadata) as {
+    channelId: string;
+    potType: PotType;
+  };
   const userId = body.user.id;
   const capacityRaw = field(values, FIELD.CAPACITY);
 
@@ -357,6 +379,7 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
   const pot = createPot({
     channelId,
     organizerId: userId,
+    potType,
     title,
     place: field(values, FIELD.PLACE),
     meetAt: field(values, FIELD.MEET_AT),
@@ -367,7 +390,7 @@ app.view(VIEW.CREATE_POT, async ({ ack, body, view, client }) => {
   try {
     const posted = await client.chat.postMessage({
       channel: channelId,
-      text: `🍚 ${pot.title} — 점심팟 모집중`,
+      text: `🍚 ${pot.title} — ${POT_TYPE_LABEL[potType]}팟 모집중`,
       blocks: potMessage(pot, getParticipants(pot.id)),
     });
     // 올린 메시지의 주소(ts)를 저장해둬야 나중에 이 메시지를 수정할 수 있습니다.

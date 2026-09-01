@@ -10,11 +10,20 @@ import { POT_STATUS, canTransition, type PotStatus } from './status.ts';
 
 // ── 타입 정의 ────────────────────────────────────────────────────────────────
 
+/** 팟의 종류. 흐름(4단계)은 똑같고, 장소를 어떻게 받는지만 달라집니다. */
+export const POT_TYPE = {
+  DELIVERY: 'DELIVERY', // /배달 — 정해진 층 중에서 고름
+  DINE_OUT: 'DINE_OUT', // /외식 — 가게 이름·주소를 직접 입력
+} as const;
+
+export type PotType = (typeof POT_TYPE)[keyof typeof POT_TYPE];
+
 export type Pot = {
   id: number;
   channel_id: string;
   message_ts: string | null;
   organizer_id: string;
+  pot_type: PotType;
   title: string;
   place: string | null;
   meet_at: string | null;
@@ -216,6 +225,7 @@ export function isParticipant(potId: number, slackUserId: string): boolean {
 export type CreatePotInput = {
   channelId: string;
   organizerId: string;
+  potType: PotType;
   title: string;
   place: string | null;
   meetAt: string | null;
@@ -234,13 +244,14 @@ export function createPot(input: CreatePotInput): Pot {
   const info = db
     .prepare(
       `INSERT INTO pots
-         (channel_id, organizer_id, title, place, meet_at, capacity, status,
+         (channel_id, organizer_id, pot_type, title, place, meet_at, capacity, status,
           bank_name, account_number, account_holder, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.channelId,
       input.organizerId,
+      input.potType,
       input.title,
       input.place,
       input.meetAt,

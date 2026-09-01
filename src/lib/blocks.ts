@@ -8,7 +8,7 @@
 
 import type { KnownBlock, View } from '@slack/types';
 import { POT_STATUS, STATUS_EMOJI, STATUS_LABEL, STATUS_ORDER, type PotStatus } from './status.ts';
-import { formatWon, type Account, type Participant, type Pot } from './pots.ts';
+import { formatWon, POT_TYPE, type Account, type Participant, type Pot, type PotType } from './pots.ts';
 
 /**
  * 버튼과 모달을 구분하는 이름표들.
@@ -77,15 +77,33 @@ export const ACCOUNT_FIELDS = [
 ] as const;
 
 /**
- * 모일 수 있는 장소. 여기 적힌 값만 고를 수 있습니다.
+ * 모일 수 있는 장소. 여기 적힌 값만 고를 수 있습니다. (/배달 전용)
  * 층이 늘어나면 이 배열에만 추가하면 모달에 자동으로 반영됩니다.
  */
 export const PLACES = ['1F', 'B1'] as const;
+
+/** 팟 종류별 표시 이름·이모지. 모달 제목과 메시지 문구에 씁니다. */
+export const POT_TYPE_LABEL: Record<PotType, string> = {
+  DELIVERY: '배달',
+  DINE_OUT: '외식',
+};
+
+export const POT_TYPE_EMOJI: Record<PotType, string> = {
+  DELIVERY: '🛵',
+  DINE_OUT: '🍽️',
+};
 
 // ── 작은 도우미들 ────────────────────────────────────────────────────────────
 
 /** 슬랙에서 <@U123> 이라고 쓰면 사람 이름으로 예쁘게 표시됩니다. */
 export const mention = (userId: string): string => `<@${userId}>`;
+
+/**
+ * 카카오맵 검색 링크. API 키 없이 쓸 수 있는 공개 단축 URL 형식입니다.
+ * 가게 이름이든 주소든 그대로 검색어로 넘기면 카카오맵이 알아서 찾아줍니다.
+ */
+export const kakaoMapSearchUrl = (query: string): string =>
+  `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
 
 const section = (text: string): KnownBlock => ({
   type: 'section',
@@ -125,6 +143,16 @@ function cancelButton(potId: string) {
   };
 }
 
+/**
+ * 장소 한 줄. 외식이면 카카오맵 검색 링크를 함께 붙입니다.
+ * (배달은 '1F'/'B1' 처럼 지도가 필요 없는 층 이름이라 링크를 안 붙입니다.)
+ */
+function placeLine(pot: Pot): string | null {
+  if (!pot.place) return null;
+  if (pot.pot_type !== POT_TYPE.DINE_OUT) return `*장소* ${pot.place}`;
+  return `*어디서* ${pot.place} · <${kakaoMapSearchUrl(pot.place)}|🗺️ 지도에서 보기>`;
+}
+
 // ── 채널에 올라가는 모집 메시지 ──────────────────────────────────────────────
 
 /**
@@ -145,7 +173,7 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
     section(
       [
         `*파티장* ${mention(pot.organizer_id)}`,
-        pot.place ? `*장소* ${pot.place}` : null,
+        placeLine(pot),
         pot.meet_at ? `*시간* ${pot.meet_at}` : null,
         `*인원* ${capacityText}`,
       ]
@@ -371,16 +399,48 @@ export function settlementDm(pot: Pot, amount: number, state: SettlementDmState)
 // ── 모달 (팝업 입력창) ───────────────────────────────────────────────────────
 
 /**
- * /점심팟 을 치면 뜨는 팟 만들기 모달.
+ * /배달 · /외식 을 치면 뜨는 팟 만들기 모달.
  * 등록해둔 계좌가 있으면 계좌 칸을 미리 채워줍니다.
+ *
+ * 두 커맨드가 같은 4단계 흐름·모달을 쓰지만, "어디서" 칸만 다릅니다.
+ *   - 배달: 정해진 층 중에서 고르는 드롭다운
+ *   - 외식: 가게 이름이나 주소를 직접 적는 자유 입력 (메시지에 지도 링크가 붙습니다)
  */
-export function createPotModal(channelId: string, savedAccount: Account | null): View {
+export function createPotModal(kind: PotType, channelId: string, savedAccount: Account | null): View {
+  const placeField: KnownBlock =
+    kind === POT_TYPE.DINE_OUT
+      ? {
+          type: 'input',
+          block_id: FIELD.PLACE,
+          label: { type: 'plain_text', text: '어디서 먹나요?' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'value',
+            placeholder: { type: 'plain_text', text: '예: OO식당 또는 서울 강남구 테헤란로 123' },
+          },
+        }
+      : {
+          // 장소: 직접 입력이 아니라 정해진 두 곳 중에서만 고릅니다.
+          type: 'input',
+          block_id: FIELD.PLACE,
+          label: { type: 'plain_text', text: '어디서 모이나요?' },
+          element: {
+            type: 'static_select',
+            action_id: 'value',
+            placeholder: { type: 'plain_text', text: '장소 선택' },
+            options: PLACES.map((place) => ({
+              text: { type: 'plain_text' as const, text: place },
+              value: place,
+            })),
+          },
+        };
+
   return {
     type: 'modal',
     callback_id: VIEW.CREATE_POT,
-    // private_metadata: 모달에 몰래 실어 보내는 메모. 어느 채널에서 열었는지 기억해둡니다.
-    private_metadata: channelId,
-    title: { type: 'plain_text', text: '점심팟 모집' },
+    // private_metadata: 모달에 몰래 실어 보내는 메모. 어느 채널·어느 종류로 열었는지 기억해둡니다.
+    private_metadata: JSON.stringify({ channelId, potType: kind }),
+    title: { type: 'plain_text', text: `${POT_TYPE_LABEL[kind]}팟 모집` },
     submit: { type: 'plain_text', text: '모집 시작' },
     close: { type: 'plain_text', text: '취소' },
     blocks: [
@@ -394,21 +454,7 @@ export function createPotModal(channelId: string, savedAccount: Account | null):
           placeholder: { type: 'plain_text', text: '예: 김치찌개 먹으러 갈 사람' },
         },
       },
-      // 장소: 직접 입력이 아니라 정해진 두 곳 중에서만 고릅니다.
-      {
-        type: 'input',
-        block_id: FIELD.PLACE,
-        label: { type: 'plain_text', text: '어디서 모이나요?' },
-        element: {
-          type: 'static_select',
-          action_id: 'value',
-          placeholder: { type: 'plain_text', text: '장소 선택' },
-          options: PLACES.map((place) => ({
-            text: { type: 'plain_text' as const, text: place },
-            value: place,
-          })),
-        },
-      },
+      placeField,
       // 시간: 장소와 완전히 별개 칸입니다. 시간만 적습니다.
       {
         type: 'input',

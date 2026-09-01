@@ -26,6 +26,7 @@ import {
   type Participant,
   type Pot,
 } from "@/lib/pots.ts";
+import { POT_TYPE_EMOJI, POT_TYPE_LABEL } from "@/lib/blocks.ts";
 import {
   POT_STATUS,
   STATUS_EMOJI,
@@ -55,7 +56,7 @@ export default async function Page({ searchParams }: PageProps) {
         <p className="mt-2 text-[13px] leading-relaxed text-secondary">
           슬랙에서{" "}
           <code className="rounded-md bg-card px-1.5 py-0.5 text-[12px] text-primary">
-            /밥먹자
+            /배달
           </code>{" "}
           으로 만든 팟의 모집 · 정산 현황
         </p>
@@ -115,7 +116,7 @@ async function PotList({ date }: { date: string | null }) {
           {date ? "이 날짜엔 팟이 없어요." : "아직 만들어진 팟이 없어요."}
         </p>
         <p className="mt-1.5 text-[13px] text-tertiary">
-          슬랙 채널에서 <code>/밥먹자</code> 을 입력해 첫 팟을 만들어 보세요.
+          슬랙 채널에서 <code>/배달</code> 을 입력해 첫 팟을 만들어 보세요.
         </p>
       </div>
     );
@@ -157,6 +158,9 @@ function PotCard({
           </h2>
           {/* 장소와 시간은 서로 다른 값이라 한 줄로 붙이지 않고 따로 보여줍니다. */}
           <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-secondary">
+            <span>
+              {POT_TYPE_EMOJI[pot.pot_type]} {POT_TYPE_LABEL[pot.pot_type]}
+            </span>
             <span>📍 {pot.place ?? "미정"}</span>
             <span>🕐 {pot.meet_at ?? "미정"}</span>
             <span>👤 {names.get(pot.organizer_id) ?? pot.organizer_id}</span>

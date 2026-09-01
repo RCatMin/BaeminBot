@@ -15,6 +15,7 @@ import {
   joinPot,
   markDisputed,
   markPaid,
+  POT_TYPE,
   startSettlement,
 } from '../src/lib/pots.ts';
 
@@ -28,6 +29,7 @@ const account = {
 const recruiting = createPot({
   channelId: 'C_LUNCH',
   organizerId: 'U_MINSU',
+  potType: POT_TYPE.DELIVERY,
   title: '김치찌개 먹으러 갈 사람',
   place: '1F',
   meetAt: '12:10',
@@ -37,10 +39,24 @@ const recruiting = createPot({
 joinPot(recruiting.id, 'U_JIHOON');
 joinPot(recruiting.id, 'U_SEOYEON');
 
+// ── 1단계: 모집중 (외식 — 가게 이름·주소로 지도 링크 확인용) ────────────────
+const dineOut = createPot({
+  channelId: 'C_LUNCH',
+  organizerId: 'U_DAHYE',
+  potType: POT_TYPE.DINE_OUT,
+  title: '냉면 먹으러 갈 사람',
+  place: '서울 강남구 테헤란로 123',
+  meetAt: '12:20',
+  capacity: 4,
+  account,
+});
+joinPot(dineOut.id, 'U_MINSU');
+
 // ── 2단계: 모집 완료 ────────────────────────────────────────────────────────
 const closed = createPot({
   channelId: 'C_LUNCH',
   organizerId: 'U_SEOYEON',
+  potType: POT_TYPE.DELIVERY,
   title: '마라탕 각',
   place: 'B1',
   meetAt: '12:00',
@@ -55,6 +71,7 @@ closePot(closed.id, 'U_SEOYEON');
 const settling = createPot({
   channelId: 'C_LUNCH',
   organizerId: 'U_JIHOON',
+  potType: POT_TYPE.DELIVERY,
   title: '삼겹살 회식 뒤풀이',
   place: 'B1',
   meetAt: '19:00',
@@ -82,6 +99,7 @@ markDisputed(settling.id, 'U_SEOYEON', true);
 const settled = createPot({
   channelId: 'C_LUNCH',
   organizerId: 'U_DAHYE',
+  potType: POT_TYPE.DELIVERY,
   title: '초밥 뷔페',
   place: '1F',
   meetAt: '12:30',
@@ -98,6 +116,7 @@ finishSettlement(settled.id, 'U_DAHYE');
 const finalized = createPot({
   channelId: 'C_LUNCH',
   organizerId: 'U_SEOYEON',
+  potType: POT_TYPE.DELIVERY,
   title: '냉면 한 그릇',
   place: '1F',
   meetAt: '12:00',
@@ -111,5 +130,5 @@ markPaid(finalized.id, 'U_JIHOON', true);
 finishSettlement(finalized.id, 'U_SEOYEON');
 finalizeSettlement(finalized.id, 'U_SEOYEON');
 
-console.log('✅ 샘플 팟 5건을 넣었습니다. (모집중 / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리)');
+console.log('✅ 샘플 팟 6건을 넣었습니다. (모집중 x2(배달·외식) / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리)');
 console.log('   npm run dev 로 http://localhost:3000 에서 확인하세요.');

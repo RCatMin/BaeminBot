@@ -51,7 +51,8 @@ describe('칸 이름은 FIELD 목록 또는 참여자별 금액칸 이름이어�
   const knownAmountFields = new Set(fakePayers.map((p) => B.amountBlockId(p.slack_user_id)));
 
   const modals = {
-    '팟 만들기': B.createPotModal('C1', null),
+    '팟 만들기 (배달)': B.createPotModal('DELIVERY', 'C1', null),
+    '팟 만들기 (외식)': B.createPotModal('DINE_OUT', 'C1', null),
     '정산 시작': B.startSettlementModal(fakePot, fakePayers, noNames, null),
     '계좌 등록': B.saveAccountModal(null),
   };
@@ -92,16 +93,18 @@ describe('정산 시작: 참여자별 금액 입력칸', () => {
 
 describe('필수·선택 표시가 실제 동작과 맞아야 한다', () => {
   test('팟 만들기: 계좌는 진짜 선택 사항 — 나중에 정산할 때 넣어도 된다', () => {
-    const byId = new Map(inputs(B.createPotModal('C1', null)).map((b) => [b.block_id, b]));
+    const byId = new Map(inputs(B.createPotModal('DELIVERY', 'C1', null)).map((b) => [b.block_id, b]));
     for (const id of B.ACCOUNT_FIELDS) {
       assert.equal(byId.get(id)?.optional, true, `${id} 는 선택이어야 함`);
     }
   });
 
-  test('팟 만들기: 메뉴와 장소는 필수', () => {
-    const byId = new Map(inputs(B.createPotModal('C1', null)).map((b) => [b.block_id, b]));
-    assert.notEqual(byId.get(B.FIELD.TITLE)?.optional, true);
-    assert.notEqual(byId.get(B.FIELD.PLACE)?.optional, true);
+  test('팟 만들기: 메뉴와 장소는 필수 (배달·외식 둘 다)', () => {
+    for (const kind of ['DELIVERY', 'DINE_OUT'] as const) {
+      const byId = new Map(inputs(B.createPotModal(kind, 'C1', null)).map((b) => [b.block_id, b]));
+      assert.notEqual(byId.get(B.FIELD.TITLE)?.optional, true);
+      assert.notEqual(byId.get(B.FIELD.PLACE)?.optional, true);
+    }
   });
 
   test('정산 시작: 계좌는 필수 — 없으면 DM을 보낼 수 없다', () => {
@@ -123,9 +126,9 @@ describe('필수·선택 표시가 실제 동작과 맞아야 한다', () => {
   });
 });
 
-describe('장소는 정해진 곳만 고를 수 있다', () => {
-  test('드롭다운 선택지가 PLACES 와 같다', () => {
-    const place = inputs(B.createPotModal('C1', null)).find(
+describe('장소: 배달은 드롭다운, 외식은 자유 입력', () => {
+  test('배달 — 선택지가 PLACES 와 같다', () => {
+    const place = inputs(B.createPotModal('DELIVERY', 'C1', null)).find(
       (b) => b.block_id === B.FIELD.PLACE,
     )!;
 
@@ -134,6 +137,47 @@ describe('장소는 정해진 곳만 고를 수 있다', () => {
       (place.element.options as { value: string }[]).map((o) => o.value),
       [...B.PLACES],
     );
+  });
+
+  test('외식 — 가게 이름·주소를 직접 적는 글자 입력칸', () => {
+    const place = inputs(B.createPotModal('DINE_OUT', 'C1', null)).find(
+      (b) => b.block_id === B.FIELD.PLACE,
+    )!;
+
+    assert.equal(place.element.type, 'plain_text_input');
+  });
+});
+
+describe('외식 팟 메시지: 주소를 적으면 지도 링크가 붙는다', () => {
+  const dineOutPot = {
+    id: 1,
+    channel_id: 'C',
+    message_ts: null,
+    organizer_id: 'U',
+    pot_type: 'DINE_OUT',
+    title: '냉면',
+    place: '서울 강남구 테헤란로 123',
+    meet_at: null,
+    capacity: 0,
+    status: POT_STATUS.RECRUITING,
+    bank_name: null,
+    account_number: null,
+    account_holder: null,
+    total_amount: null,
+    created_at: '',
+    updated_at: '',
+  } as Parameters<typeof B.potMessage>[0];
+
+  test('장소 줄에 카카오맵 검색 링크가 포함된다', () => {
+    const blocks = B.potMessage(dineOutPot, []);
+    const text = JSON.stringify(blocks);
+    assert.ok(text.includes(B.kakaoMapSearchUrl(dineOutPot.place!)));
+  });
+
+  test('배달 팟(같은 place 값)에는 지도 링크가 없다', () => {
+    const blocks = B.potMessage({ ...dineOutPot, pot_type: 'DELIVERY' }, []);
+    const text = JSON.stringify(blocks);
+    assert.ok(!text.includes('map.kakao.com'));
   });
 });
 

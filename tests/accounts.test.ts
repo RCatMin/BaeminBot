@@ -20,6 +20,7 @@ function finalizedPot(organizerId = LEADER) {
   const pot = P.createPot({
     channelId: 'C_TEST',
     organizerId,
+    potType: P.POT_TYPE.DELIVERY,
     title: '계좌 테스트',
     place: '1F',
     meetAt: null,
@@ -78,6 +79,7 @@ describe('사용자 이름 기억', () => {
     const pot = P.createPot({
       channelId: 'C_TEST',
       organizerId: 'U_UNNAMED_LEADER',
+      potType: P.POT_TYPE.DELIVERY,
       title: '이름 없는 팟',
       place: null,
       meetAt: null,
@@ -118,6 +120,7 @@ describe('계좌번호 보관 기간', () => {
     const pot = P.createPot({
       channelId: 'C_TEST',
       organizerId: LEADER,
+      potType: P.POT_TYPE.DELIVERY,
       title: '아직 마무리 전',
       place: null,
       meetAt: null,
@@ -139,6 +142,7 @@ describe('계좌번호 보관 기간', () => {
     const pot = P.createPot({
       channelId: 'C_TEST',
       organizerId: LEADER,
+      potType: P.POT_TYPE.DELIVERY,
       title: '진행 중',
       place: null,
       meetAt: null,
@@ -169,6 +173,7 @@ describe('계좌번호 보관 기간', () => {
     const pot = P.createPot({
       channelId: 'C_TEST',
       organizerId: LEADER,
+      potType: P.POT_TYPE.DELIVERY,
       title: '취소될 팟',
       place: null,
       meetAt: null,

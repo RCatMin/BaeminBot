@@ -22,6 +22,7 @@ function newPot(capacity = 0) {
   return P.createPot({
     channelId: 'C_TEST',
     organizerId: LEADER,
+    potType: P.POT_TYPE.DELIVERY,
     title: '테스트 팟',
     place: '1F',
     meetAt: '12:00',
