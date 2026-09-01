@@ -122,6 +122,32 @@ describe('2단계 · 모집 마감', () => {
   });
 });
 
+describe('2단계 · 정산 없이 종료 (각자 계산)', () => {
+  test('모집 완료 상태에서 파티장만 고를 수 있다', () => {
+    const pot = newPot();
+    P.closePot(pot.id, LEADER);
+    assert.ok(!P.finishWithoutSettlement(pot.id, OTHER).ok);
+
+    const result = P.finishWithoutSettlement(pot.id, LEADER);
+    assert.ok(result.ok);
+    assert.equal(result.value.status, POT_STATUS.NO_SETTLEMENT);
+  });
+
+  test('모집중 상태에서는 고를 수 없다 — 마감이 먼저', () => {
+    const pot = newPot();
+    assert.ok(!P.finishWithoutSettlement(pot.id, LEADER).ok);
+  });
+
+  test('한 번 고르면 되돌릴 수 없다 — 취소와 같은 옆길이라 되살리지 않는다', () => {
+    const pot = newPot();
+    P.closePot(pot.id, LEADER);
+    P.finishWithoutSettlement(pot.id, LEADER);
+
+    assert.ok(!P.finishWithoutSettlement(pot.id, LEADER).ok);
+    assert.ok(!P.cancelPot(pot.id, LEADER).ok);
+  });
+});
+
 describe('3단계 · 정산 시작', () => {
   test('파티장만 시작할 수 있다', () => {
     const pot = newPot();

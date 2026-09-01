@@ -12,6 +12,7 @@ import {
   createPot,
   finalizeSettlement,
   finishSettlement,
+  finishWithoutSettlement,
   joinPot,
   markDisputed,
   markPaid,
@@ -130,5 +131,20 @@ markPaid(finalized.id, 'U_JIHOON', true);
 finishSettlement(finalized.id, 'U_SEOYEON');
 finalizeSettlement(finalized.id, 'U_SEOYEON');
 
-console.log('✅ 샘플 팟 6건을 넣었습니다. (모집중 x2(배달·외식) / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리)');
+// ── 정산 없이 종료: 각자 계산하는 자리라 정산 단계를 건너뛴 경우 ────────────
+const noSettlement = createPot({
+  channelId: 'C_LUNCH',
+  organizerId: 'U_MINSU',
+  potType: POT_TYPE.DINE_OUT,
+  title: '파스타 먹으러 갈 사람',
+  place: '이태리 부대찌개',
+  meetAt: '12:15',
+  capacity: 0,
+  account: null,
+});
+joinPot(noSettlement.id, 'U_JIHOON');
+closePot(noSettlement.id, 'U_MINSU');
+finishWithoutSettlement(noSettlement.id, 'U_MINSU');
+
+console.log('✅ 샘플 팟 7건을 넣었습니다. (모집중 x2(배달·외식) / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리 / 정산 없이 종료)');
 console.log('   npm run dev 로 http://localhost:3000 에서 확인하세요.');

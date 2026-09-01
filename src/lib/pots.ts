@@ -337,6 +337,16 @@ export function closePot(potId: number, actorId: string): Result<Pot> {
   return advance(potId, actorId, POT_STATUS.CLOSED);
 }
 
+/**
+ * 정산 없이 끝냅니다. 파티장만 할 수 있고, 모집 완료 상태에서만 고를 수 있습니다.
+ *
+ * 각자 계산하는 식당처럼 봇으로 돈을 모을 필요가 없을 때 씁니다. 취소와 달리
+ * 약속 자체는 잘 끝났다는 뜻이라 상태를 따로 둡니다(CANCELLED와 구분).
+ */
+export function finishWithoutSettlement(potId: number, actorId: string): Result<Pot> {
+  return advance(potId, actorId, POT_STATUS.NO_SETTLEMENT);
+}
+
 // ── 3단계: 정산 중 ──────────────────────────────────────────────────────────
 
 /**
@@ -537,6 +547,9 @@ export function finalizeSettlement(potId: number, actorId: string): Result<Pot> 
  * 되돌릴 수 있는 단계라, 계좌를 지우면 그 길이 막힙니다. 계좌는 "🏁 정산 마무리"를
  * 눌러 더 이상 되돌릴 수 없게 된 뒤에야 지웁니다.
  *
+ * "🙋 정산 없이 종료"도 같이 지웁니다 — 정산은 안 했어도, 팟을 만들 때 계좌를
+ * 미리 적어뒀을 수 있어서(계좌 칸은 선택 사항입니다) 이 상태에도 계좌가 남아 있을 수 있습니다.
+ *
  * graceHours 동안은 건드리지 않습니다. 마무리 직후 바로 지우기보다는 약간의
  * 여유를 두는 편이 안전합니다.
  *
@@ -549,11 +562,11 @@ export function purgeFinishedAccounts(graceHours = 24): number {
     .prepare(
       `UPDATE pots
           SET bank_name = NULL, account_number = NULL, account_holder = NULL
-        WHERE status IN (?, ?)
+        WHERE status IN (?, ?, ?)
           AND updated_at < ?
           AND account_number IS NOT NULL`,
     )
-    .run(POT_STATUS.FINALIZED, POT_STATUS.CANCELLED, cutoff);
+    .run(POT_STATUS.FINALIZED, POT_STATUS.CANCELLED, POT_STATUS.NO_SETTLEMENT, cutoff);
 
   return Number(info.changes);
 }

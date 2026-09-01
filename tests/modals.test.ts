@@ -234,6 +234,13 @@ describe('상태별 버튼', () => {
     assert.ok(ids.includes(B.ACTION.CANCEL));
   });
 
+  test('모집 완료: 정산 시작과 정산 없이 종료(각자 계산) 둘 다 있다', () => {
+    const ids = buttonsFor(POT_STATUS.CLOSED);
+    assert.ok(ids.includes(B.ACTION.OPEN_SETTLE_MODAL));
+    assert.ok(ids.includes(B.ACTION.NO_SETTLEMENT));
+    assert.ok(ids.includes(B.ACTION.CANCEL));
+  });
+
   test('정산 중: DM 재발송이 있어야 한다 — DM이 안 갔을 때 유일한 복구 수단', () => {
     const ids = buttonsFor(POT_STATUS.SETTLING);
     assert.ok(ids.includes(B.ACTION.RESEND_DM));
@@ -250,5 +257,9 @@ describe('상태별 버튼', () => {
 
   test('취소됨: 누를 게 없다', () => {
     assert.deepEqual(buttonsFor(POT_STATUS.CANCELLED), []);
+  });
+
+  test('정산 없이 종료: 누를 게 없다', () => {
+    assert.deepEqual(buttonsFor(POT_STATUS.NO_SETTLEMENT), []);
   });
 });

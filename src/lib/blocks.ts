@@ -20,6 +20,7 @@ export const ACTION = {
   LEAVE: 'pot_leave',
   CLOSE: 'pot_close',
   OPEN_SETTLE_MODAL: 'pot_open_settle_modal',
+  NO_SETTLEMENT: 'pot_no_settlement',
   MARK_PAID: 'pot_mark_paid',
   UNMARK_PAID: 'pot_unmark_paid',
   DISPUTE: 'pot_dispute',
@@ -120,8 +121,9 @@ const context = (text: string): KnownBlock => ({
  * 예) *모집중* ─ 모집 완료 ─ 정산 중 ─ 정산 완료
  */
 function progressBar(status: PotStatus): string {
-  // 취소된 팟은 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
+  // 취소된 팟, 정산 없이 끝난 팟은 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
   if (status === POT_STATUS.CANCELLED) return `🚫 *취소된 팟이에요*`;
+  if (status === POT_STATUS.NO_SETTLEMENT) return `💳 *정산 없이 끝났어요 (각자 계산)*`;
 
   // 정산 마무리는 새 단계가 아니라 정산 완료 위에 얹는 잠금이라, 막대에서는
   // 정산 완료 칸을 그대로 강조하고 그 아래 한 줄만 덧붙입니다.
@@ -247,7 +249,8 @@ function potActions(pot: Pot): KnownBlock | null {
         ],
       };
 
-    // 2단계 모집 완료: 파티장이 금액을 입력해 정산을 시작
+    // 2단계 모집 완료: 파티장이 금액을 입력해 정산을 시작하거나, 각자 계산하는
+    // 자리였다면 정산 없이 바로 끝냅니다.
     case POT_STATUS.CLOSED:
       return {
         type: 'actions',
@@ -257,6 +260,12 @@ function potActions(pot: Pot): KnownBlock | null {
             action_id: ACTION.OPEN_SETTLE_MODAL,
             text: { type: 'plain_text', text: '💸 정산 시작 (파티장)', emoji: true },
             style: 'primary',
+            value: potId,
+          },
+          {
+            type: 'button',
+            action_id: ACTION.NO_SETTLEMENT,
+            text: { type: 'plain_text', text: '🙋 정산 없이 종료 (각자 계산)', emoji: true },
             value: potId,
           },
           cancelButton(potId),
@@ -308,9 +317,10 @@ function potActions(pot: Pot): KnownBlock | null {
         ],
       };
 
-    // 정산 마무리 · 취소됨: 더 이상 누를 게 없습니다.
+    // 정산 마무리 · 취소됨 · 정산 없이 종료: 더 이상 누를 게 없습니다.
     case POT_STATUS.FINALIZED:
     case POT_STATUS.CANCELLED:
+    case POT_STATUS.NO_SETTLEMENT:
     default:
       return null;
   }

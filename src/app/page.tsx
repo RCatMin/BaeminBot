@@ -225,12 +225,12 @@ function PotCard({
 function StatusTracker({ status }: { status: PotStatus }) {
   const current = statusStep(status);
 
-  // 취소된 팟은 4단계 흐름 밖이라 막대 대신 한 줄로 표시합니다.
+  // 취소된 팟 · 정산 없이 끝난 팟은 4단계 흐름 밖이라 막대 대신 한 줄로 표시합니다.
   // (막대를 그리면 "0단계에 멈춘 팟"처럼 보여서 오해를 부릅니다)
   if (current === 0) {
     return (
       <p className="mt-5 border-t border-line pt-3.5 text-[13px] text-tertiary">
-        진행이 중단된 팟이에요
+        {status === POT_STATUS.NO_SETTLEMENT ? "정산 없이 끝났어요 (각자 계산)" : "진행이 중단된 팟이에요"}
       </p>
     );
   }
@@ -273,6 +273,7 @@ function StatusBadge({ status }: { status: PotStatus }) {
     FINALIZED: "bg-violet-500/15 text-violet-600",
     // 취소됨은 눈에 덜 띄게 회색으로 둡니다. 진행 중인 팟을 가리지 않도록요.
     CANCELLED: "bg-line/60 text-tertiary",
+    NO_SETTLEMENT: "bg-cyan-500/15 text-cyan-600",
   };
 
   return (

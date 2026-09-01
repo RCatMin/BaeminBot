@@ -22,6 +22,9 @@ export const POT_STATUS = {
   // 4단계 흐름 바깥에 있는 종료 상태들.
   FINALIZED: 'FINALIZED', // 정산 마무리 — 파티장이 확정한 뒤에는 되돌릴 수 없습니다.
   CANCELLED: 'CANCELLED', // 취소됨. 약속이 깨졌거나 잘못 만든 팟이 영원히 남지 않도록 빠져나오는 길입니다.
+  // 모집 완료에서 곧장 빠져나오는 길. 각자 계산하는 식당처럼 봇 안에서 돈을 모을 필요가
+  // 없을 때 씁니다. 취소와 달리 "약속은 잘 끝났다"는 뜻이라 화면에서 따로 구분합니다.
+  NO_SETTLEMENT: 'NO_SETTLEMENT',
 } as const;
 
 // POT_STATUS의 값들만 뽑아서 만든 타입.
@@ -35,6 +38,7 @@ export const STATUS_LABEL: Record<PotStatus, string> = {
   SETTLED: '정산 완료',
   FINALIZED: '정산 마무리',
   CANCELLED: '취소됨',
+  NO_SETTLEMENT: '정산 없음',
 };
 
 /** 상태별 이모지 (슬랙 메시지 제목에 붙습니다) */
@@ -45,6 +49,7 @@ export const STATUS_EMOJI: Record<PotStatus, string> = {
   SETTLED: '✅',
   FINALIZED: '🏁',
   CANCELLED: '🚫',
+  NO_SETTLEMENT: '💳',
 };
 
 /**
@@ -59,14 +64,19 @@ export const STATUS_EMOJI: Record<PotStatus, string> = {
  * 일부러 이 표에 넣지 않았습니다. pots.ts의 reopenSettlement()가 규칙표를 타지 않는
  * 의도적인 예외로 직접 처리합니다 — 표에 넣으면 "정산 완료의 다음 단계가 정산 중"인 것처럼
  * 보여서 앞으로 가는 흐름과 헷갈립니다.
+ *
+ * CLOSED → NO_SETTLEMENT 도 CANCELLED처럼 옆길입니다. 각자 계산하는 식당이라 봇으로
+ * 돈을 모을 필요가 없을 때 파티장이 고릅니다. 한 번 고르면 되돌릴 수 없습니다
+ * (마음이 바뀌었다면 새로 팟을 만드는 게 낫습니다 — CANCELLED와 같은 이유).
  */
 const ALLOWED_TRANSITIONS: Record<PotStatus, PotStatus[]> = {
   RECRUITING: [POT_STATUS.CLOSED, POT_STATUS.CANCELLED],
-  CLOSED: [POT_STATUS.SETTLING, POT_STATUS.CANCELLED],
+  CLOSED: [POT_STATUS.SETTLING, POT_STATUS.NO_SETTLEMENT, POT_STATUS.CANCELLED],
   SETTLING: [POT_STATUS.SETTLED, POT_STATUS.CANCELLED],
   SETTLED: [POT_STATUS.FINALIZED], // 정산 완료까지는 다시 열 수 있지만, 마무리하면 그걸로 끝입니다.
   FINALIZED: [], // 마무리된 팟은 되돌릴 수 없습니다. 계좌번호도 곧 지워집니다.
   CANCELLED: [], // 취소된 팟은 되살리지 않습니다. 새로 만드는 게 낫습니다.
+  NO_SETTLEMENT: [], // 정산 없이 끝난 팟도 되살리지 않습니다.
 };
 
 /** from 상태에서 to 상태로 넘어가도 되는지 확인합니다. */

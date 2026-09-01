@@ -39,6 +39,7 @@ import {
   deletePot,
   finalizeSettlement,
   finishSettlement,
+  finishWithoutSettlement,
   formatWon,
   getAccount,
   getParticipants,
@@ -468,6 +469,24 @@ app.action(ACTION.CLOSE, async ({ ack, body, action }) => {
     thread_ts: pot.message_ts ?? undefined, // 채널을 어지럽히지 않게 스레드로 답니다.
     text: `🔒 모집이 마감됐어요. 총 ${getParticipants(pot.id).length}명이에요.`,
   });
+});
+
+/**
+ * 🙋 정산 없이 종료 (각자 계산) — 파티장만 누를 수 있습니다.
+ * 각자 계산하는 식당처럼 봇으로 돈을 모을 필요가 없을 때, 정산 단계를 건너뛰고 바로 끝냅니다.
+ */
+app.action(ACTION.NO_SETTLEMENT, async ({ ack, body, action }) => {
+  await ack();
+  const potId = Number((action as { value: string }).value);
+  const userId = body.user.id;
+
+  const result = finishWithoutSettlement(potId, userId);
+  if (!result.ok) {
+    await replyToClick(body, result.error);
+    return;
+  }
+
+  await refreshPotMessage(result.value);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -169,6 +169,25 @@ describe('계좌번호 보관 기간', () => {
     assert.equal(P.getParticipants(pot.id).length, 2);
   });
 
+  test('정산 없이 종료된 팟도 같은 규칙을 따른다 — 팟 만들 때 계좌를 미리 적어뒀을 수 있다', () => {
+    const pot = P.createPot({
+      channelId: 'C_TEST',
+      organizerId: LEADER,
+      potType: P.POT_TYPE.DELIVERY,
+      title: '각자 계산',
+      place: null,
+      meetAt: null,
+      capacity: 0,
+      account: TEST_ACCOUNT, // 계좌 칸은 선택 사항이라 이렇게 미리 적어둘 수 있습니다.
+    });
+    P.closePot(pot.id, LEADER);
+    P.finishWithoutSettlement(pot.id, LEADER);
+    pretendItEndedDaysAgo(pot.id, 2);
+
+    P.purgeFinishedAccounts();
+    assert.equal(P.getPot(pot.id)!.account_number, null);
+  });
+
   test('취소된 팟도 같은 규칙을 따른다', () => {
     const pot = P.createPot({
       channelId: 'C_TEST',
