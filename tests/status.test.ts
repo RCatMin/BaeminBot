@@ -68,6 +68,22 @@ describe('상태 전이 규칙', () => {
     }
   });
 
+  test('모집중은 추첨 완료(내기)로도 넘어갈 수 있다', () => {
+    assert.ok(canTransition(POT_STATUS.RECRUITING, POT_STATUS.DRAWN));
+  });
+
+  test('추첨 완료는 모집중에서만 고를 수 있다', () => {
+    assert.ok(!canTransition(POT_STATUS.CLOSED, POT_STATUS.DRAWN));
+    assert.ok(!canTransition(POT_STATUS.SETTLING, POT_STATUS.DRAWN));
+    assert.ok(!canTransition(POT_STATUS.SETTLED, POT_STATUS.DRAWN));
+  });
+
+  test('추첨이 끝난 내기는 어디로도 넘어갈 수 없다', () => {
+    for (const to of [...STATUS_ORDER, POT_STATUS.CANCELLED, POT_STATUS.FINALIZED, POT_STATUS.NO_SETTLEMENT]) {
+      assert.ok(!canTransition(POT_STATUS.DRAWN, to), `DRAWN → ${to} 는 막혀야 함`);
+    }
+  });
+
   test('취소된 팟은 되살릴 수 없다', () => {
     for (const to of STATUS_ORDER) {
       assert.ok(!canTransition(POT_STATUS.CANCELLED, to), `CANCELLED → ${to} 는 막혀야 함`);
@@ -110,9 +126,10 @@ describe('진행률 표시', () => {
     assert.equal(statusStep(POT_STATUS.FINALIZED), 4);
   });
 
-  test('취소됨 · 정산 없이 종료는 흐름 밖이라 0 — 화면에서 진행 막대 대신 문구를 띄우는 근거', () => {
+  test('취소됨 · 정산 없이 종료 · 추첨 완료는 흐름 밖이라 0 — 화면에서 진행 막대 대신 문구를 띄우는 근거', () => {
     assert.equal(statusStep(POT_STATUS.CANCELLED), 0);
     assert.equal(statusStep(POT_STATUS.NO_SETTLEMENT), 0);
+    assert.equal(statusStep(POT_STATUS.DRAWN), 0);
   });
 
   test('진행 막대에는 4단계만 들어간다', () => {
@@ -123,10 +140,11 @@ describe('진행률 표시', () => {
 });
 
 describe('끝난 상태 판별', () => {
-  test('정산 마무리 · 취소됨 · 정산 없이 종료만 끝난 상태 — 정산 완료는 아직 되돌릴 수 있어서 제외', () => {
+  test('정산 마무리 · 취소됨 · 정산 없이 종료 · 추첨 완료만 끝난 상태 — 정산 완료는 아직 되돌릴 수 있어서 제외', () => {
     assert.ok(isFinished(POT_STATUS.FINALIZED));
     assert.ok(isFinished(POT_STATUS.CANCELLED));
     assert.ok(isFinished(POT_STATUS.NO_SETTLEMENT));
+    assert.ok(isFinished(POT_STATUS.DRAWN));
     assert.ok(!isFinished(POT_STATUS.SETTLED));
     assert.ok(!isFinished(POT_STATUS.RECRUITING));
     assert.ok(!isFinished(POT_STATUS.CLOSED));

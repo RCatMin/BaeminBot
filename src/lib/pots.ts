@@ -10,10 +10,11 @@ import { POT_STATUS, canTransition, type PotStatus } from './status.ts';
 
 // ── 타입 정의 ────────────────────────────────────────────────────────────────
 
-/** 팟의 종류. 흐름(4단계)은 똑같고, 장소를 어떻게 받는지만 달라집니다. */
+/** 팟의 종류. 배달·외식은 4단계 흐름을 그대로 쓰고, 내기는 정산 없이 추첨만 합니다. */
 export const POT_TYPE = {
   DELIVERY: 'DELIVERY', // /배달 — 정해진 층 중에서 고름
   DINE_OUT: 'DINE_OUT', // /외식 — 가게 이름·주소를 직접 입력
+  BET: 'BET', // /내기빵 — 참가자 중 한 명을 뽑아 정함 (돈은 안 걷음)
 } as const;
 
 export type PotType = (typeof POT_TYPE)[keyof typeof POT_TYPE];
@@ -33,6 +34,7 @@ export type Pot = {
   account_number: string | null;
   account_holder: string | null;
   total_amount: number | null;
+  winner_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -335,6 +337,32 @@ export function leavePot(potId: number, slackUserId: string): Result<Pot> {
 /** 모집을 마감합니다. 파티장만 할 수 있습니다. */
 export function closePot(potId: number, actorId: string): Result<Pot> {
   return advance(potId, actorId, POT_STATUS.CLOSED);
+}
+
+/**
+ * 내기(BET) 참가자 중 한 명을 무작위로 뽑습니다. 파티장만 할 수 있고,
+ * 모집중 상태에서만 가능합니다. (👉 "🎲 추첨하기" 버튼)
+ *
+ * 정산이 없는 대신, 최소 2명은 있어야 내기가 성립한다고 보고 막아둡니다.
+ */
+export function drawWinner(potId: number, actorId: string): Result<{ pot: Pot; winnerId: string }> {
+  const pot = getPot(potId);
+  if (!pot) return fail('이미 사라진 팟이에요.');
+  if (pot.organizer_id !== actorId) return fail('파티장만 추첨할 수 있어요.');
+  if (!canTransition(pot.status, POT_STATUS.DRAWN)) {
+    return fail('지금 단계에서는 추첨할 수 없어요.');
+  }
+
+  const participants = getParticipants(potId);
+  if (participants.length < 2) return fail('최소 2명은 있어야 추첨할 수 있어요.');
+
+  const winner = participants[Math.floor(Math.random() * participants.length)];
+
+  getDb()
+    .prepare(`UPDATE pots SET status = ?, winner_id = ?, updated_at = ? WHERE id = ?`)
+    .run(POT_STATUS.DRAWN, winner.slack_user_id, now(), potId);
+
+  return ok({ pot: getPot(potId)!, winnerId: winner.slack_user_id });
 }
 
 /**

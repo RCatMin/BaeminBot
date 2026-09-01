@@ -31,6 +31,20 @@ function newPot(capacity = 0) {
   });
 }
 
+/** 테스트용 내기를 하나 만듭니다. */
+function newBet(capacity = 0) {
+  return P.createPot({
+    channelId: 'C_TEST',
+    organizerId: LEADER,
+    potType: P.POT_TYPE.BET,
+    title: '커피 내기',
+    place: '커피',
+    meetAt: null,
+    capacity,
+    account: null,
+  });
+}
+
 /** 정산 중 단계까지 진행한 팟을 만듭니다. 참여자는 OTHER 한 명, 낼 금액은 amount. */
 function potInSettling(amount = 30000) {
   const pot = newPot();
@@ -145,6 +159,46 @@ describe('2단계 · 정산 없이 종료 (각자 계산)', () => {
 
     assert.ok(!P.finishWithoutSettlement(pot.id, LEADER).ok);
     assert.ok(!P.cancelPot(pot.id, LEADER).ok);
+  });
+});
+
+describe('내기 · 추첨', () => {
+  test('참가자 중 한 명이 뽑히고, 상태가 추첨 완료로 바뀐다', () => {
+    const bet = newBet();
+    P.joinPot(bet.id, OTHER);
+
+    const result = P.drawWinner(bet.id, LEADER);
+    assert.ok(result.ok);
+    assert.equal(result.value.pot.status, POT_STATUS.DRAWN);
+    assert.ok([LEADER, OTHER].includes(result.value.winnerId));
+    assert.equal(P.getPot(bet.id)!.winner_id, result.value.winnerId);
+  });
+
+  test('파티장만 추첨할 수 있다', () => {
+    const bet = newBet();
+    P.joinPot(bet.id, OTHER);
+    assert.ok(!P.drawWinner(bet.id, OTHER).ok);
+  });
+
+  test('참가자가 1명(파티장만)이면 추첨할 수 없다', () => {
+    const bet = newBet();
+    const result = P.drawWinner(bet.id, LEADER);
+    assert.ok(!result.ok);
+    assert.match(result.error, /2명/);
+  });
+
+  test('두 번 추첨할 수 없다 — 결과는 되돌리지 않는다', () => {
+    const bet = newBet();
+    P.joinPot(bet.id, OTHER);
+    assert.ok(P.drawWinner(bet.id, LEADER).ok);
+    assert.ok(!P.drawWinner(bet.id, LEADER).ok);
+  });
+
+  test('마감 전(모집중)에서만 추첨할 수 있다', () => {
+    const bet = newBet();
+    P.joinPot(bet.id, OTHER);
+    P.cancelPot(bet.id, LEADER);
+    assert.ok(!P.drawWinner(bet.id, LEADER).ok);
   });
 });
 

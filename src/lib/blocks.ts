@@ -34,6 +34,7 @@ export const ACTION = {
 
 export const VIEW = {
   CREATE_POT: 'view_create_pot',
+  CREATE_BET: 'view_create_bet',
   START_SETTLEMENT: 'view_start_settlement',
   SAVE_ACCOUNT: 'view_save_account',
 } as const;
@@ -50,6 +51,7 @@ export const FIELD = {
   PLACE: 'place',
   MEET_AT: 'meet_at',
   CAPACITY: 'capacity',
+  BET_CATEGORY: 'bet_category',
   REMEMBER_ACCOUNT: 'remember_account',
   BANK_NAME: 'bank_name',
   ACCOUNT_NUMBER: 'account_number',
@@ -83,15 +85,20 @@ export const ACCOUNT_FIELDS = [
  */
 export const PLACES = ['1F', 'B1'] as const;
 
+/** 내기에서 고를 수 있는 카테고리. (/내기빵 전용) */
+export const BET_CATEGORIES = ['점심', '커피', '디저트'] as const;
+
 /** 팟 종류별 표시 이름·이모지. 모달 제목과 메시지 문구에 씁니다. */
 export const POT_TYPE_LABEL: Record<PotType, string> = {
   DELIVERY: '배달',
   DINE_OUT: '외식',
+  BET: '내기',
 };
 
 export const POT_TYPE_EMOJI: Record<PotType, string> = {
   DELIVERY: '🛵',
   DINE_OUT: '🍽️',
+  BET: '🎲',
 };
 
 // ── 작은 도우미들 ────────────────────────────────────────────────────────────
@@ -121,9 +128,10 @@ const context = (text: string): KnownBlock => ({
  * 예) *모집중* ─ 모집 완료 ─ 정산 중 ─ 정산 완료
  */
 function progressBar(status: PotStatus): string {
-  // 취소된 팟, 정산 없이 끝난 팟은 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
+  // 취소된 팟, 정산 없이 끝난 팟, 추첨이 끝난 내기는 4단계 흐름 밖이라 진행 막대를 그리지 않습니다.
   if (status === POT_STATUS.CANCELLED) return `🚫 *취소된 팟이에요*`;
   if (status === POT_STATUS.NO_SETTLEMENT) return `💳 *정산 없이 끝났어요 (각자 계산)*`;
+  if (status === POT_STATUS.DRAWN) return `🎉 *추첨이 끝났어요*`;
 
   // 정산 마무리는 새 단계가 아니라 정산 완료 위에 얹는 잠금이라, 막대에서는
   // 정산 완료 칸을 그대로 강조하고 그 아래 한 줄만 덧붙입니다.
@@ -146,13 +154,20 @@ function cancelButton(potId: string) {
 }
 
 /**
- * 장소 한 줄. 외식이면 카카오맵 검색 링크를 함께 붙입니다.
+ * 장소(또는 내기 카테고리) 한 줄. 외식이면 카카오맵 검색 링크를 함께 붙입니다.
  * (배달은 '1F'/'B1' 처럼 지도가 필요 없는 층 이름이라 링크를 안 붙입니다.)
  */
 function placeLine(pot: Pot): string | null {
   if (!pot.place) return null;
+  if (pot.pot_type === POT_TYPE.BET) return `*내기* ${pot.place} 쏘기`;
   if (pot.pot_type !== POT_TYPE.DINE_OUT) return `*장소* ${pot.place}`;
   return `*어디서* ${pot.place} · <${kakaoMapSearchUrl(pot.place)}|🗺️ 지도에서 보기>`;
+}
+
+/** 추첨이 끝난 내기라면 당첨자 한 줄을 보여줍니다. */
+function winnerLine(pot: Pot): string | null {
+  if (pot.status !== POT_STATUS.DRAWN || !pot.winner_id) return null;
+  return `*당첨자* ${mention(pot.winner_id)} 🎉`;
 }
 
 // ── 채널에 올라가는 모집 메시지 ──────────────────────────────────────────────
@@ -178,6 +193,7 @@ export function potMessage(pot: Pot, participants: Participant[]): KnownBlock[] 
         placeLine(pot),
         pot.meet_at ? `*시간* ${pot.meet_at}` : null,
         `*인원* ${capacityText}`,
+        winnerLine(pot),
       ]
         .filter(Boolean)
         .join('\n'),
@@ -242,7 +258,12 @@ function potActions(pot: Pot): KnownBlock | null {
           {
             type: 'button',
             action_id: ACTION.CLOSE,
-            text: { type: 'plain_text', text: '🔒 모집 마감 (파티장)', emoji: true },
+            text: {
+              type: 'plain_text',
+              // 내기는 "마감"이 아니라 바로 추첨으로 이어져서 버튼 문구도 다르게 보여줍니다.
+              text: pot.pot_type === POT_TYPE.BET ? '🎲 추첨하기 (파티장)' : '🔒 모집 마감 (파티장)',
+              emoji: true,
+            },
             value: potId,
           },
           cancelButton(potId),
@@ -317,10 +338,11 @@ function potActions(pot: Pot): KnownBlock | null {
         ],
       };
 
-    // 정산 마무리 · 취소됨 · 정산 없이 종료: 더 이상 누를 게 없습니다.
+    // 정산 마무리 · 취소됨 · 정산 없이 종료 · 추첨 완료: 더 이상 누를 게 없습니다.
     case POT_STATUS.FINALIZED:
     case POT_STATUS.CANCELLED:
     case POT_STATUS.NO_SETTLEMENT:
+    case POT_STATUS.DRAWN:
     default:
       return null;
   }
@@ -491,6 +513,51 @@ export function createPotModal(kind: PotType, channelId: string, savedAccount: A
       },
       { type: 'divider' },
       ...accountInputs(savedAccount, '정산받을 계좌 (나중에 입력해도 돼요)'),
+    ],
+  };
+}
+
+/**
+ * /내기빵 을 치면 뜨는 내기 만들기 모달.
+ *
+ * 팟 만들기 모달과 달리 시간·계좌 칸이 없습니다 — 내기는 정산이 아니라
+ * "누가 살지" 참가자 중 한 명을 뽑는 게 목적이라서요.
+ */
+export function createBetModal(channelId: string): View {
+  return {
+    type: 'modal',
+    callback_id: VIEW.CREATE_BET,
+    private_metadata: channelId,
+    title: { type: 'plain_text', text: '내기빵' },
+    submit: { type: 'plain_text', text: '내기 시작' },
+    close: { type: 'plain_text', text: '취소' },
+    blocks: [
+      {
+        type: 'input',
+        block_id: FIELD.BET_CATEGORY,
+        label: { type: 'plain_text', text: '뭘 걸고 내기할까요?' },
+        element: {
+          type: 'static_select',
+          action_id: 'value',
+          placeholder: { type: 'plain_text', text: '점심? 커피? 디저트?' },
+          options: BET_CATEGORIES.map((category) => ({
+            text: { type: 'plain_text' as const, text: category },
+            value: category,
+          })),
+        },
+      },
+      {
+        type: 'input',
+        block_id: FIELD.CAPACITY,
+        optional: true,
+        label: { type: 'plain_text', text: '참가자 수 (비우면 무제한)' },
+        element: {
+          type: 'number_input',
+          action_id: 'value',
+          is_decimal_allowed: false,
+          min_value: '2',
+        },
+      },
     ],
   };
 }

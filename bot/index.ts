@@ -24,6 +24,7 @@ import {
   POT_TYPE_LABEL,
   VIEW,
   amountBlockId,
+  createBetModal,
   createPotModal,
   type FieldId,
   mention,
@@ -37,6 +38,7 @@ import {
   closePot,
   createPot,
   deletePot,
+  drawWinner,
   finalizeSettlement,
   finishSettlement,
   finishWithoutSettlement,
@@ -450,11 +452,35 @@ app.action(ACTION.LEAVE, async ({ ack, body, action }) => {
 // 2단계: 모집 완료
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 🔒 모집 마감 — 파티장만 누를 수 있습니다. (검사는 closePot 안에서 합니다) */
+/**
+ * 🔒 모집 마감 / 🎲 추첨하기 — 파티장만 누를 수 있습니다.
+ *
+ * 버튼은 하나지만 팟 종류에 따라 하는 일이 다릅니다. 내기(BET)는 "마감" 없이
+ * 곧장 참가자 중 한 명을 뽑고, 나머지는 평소대로 모집을 마감합니다.
+ * (검사는 closePot · drawWinner 안에서 합니다)
+ */
 app.action(ACTION.CLOSE, async ({ ack, body, action }) => {
   await ack();
   const potId = Number((action as { value: string }).value);
   const userId = body.user.id;
+  const target = getPot(potId);
+
+  if (target?.pot_type === POT_TYPE.BET) {
+    const result = drawWinner(potId, userId);
+    if (!result.ok) {
+      await replyToClick(body, result.error);
+      return;
+    }
+
+    const { pot, winnerId } = result.value;
+    await refreshPotMessage(pot);
+    await client.chat.postMessage({
+      channel: pot.channel_id,
+      thread_ts: pot.message_ts ?? undefined,
+      text: `🎉 당첨자는 ${mention(winnerId)} 님이에요! ${pot.place} 쏘시죠 🙏`,
+    });
+    return;
+  }
 
   const result = closePot(potId, userId);
   if (!result.ok) {
@@ -990,6 +1016,72 @@ app.view(VIEW.SAVE_ACCOUNT, async ({ ack, body, view, client }) => {
     channel: body.user.id,
     text: `✅ 계좌를 저장했어요.\n${account.bank_name} ${account.account_number} (${account.account_holder})`,
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 내기 — 정산 없이 참가자 중 한 명을 뽑습니다
+// ─────────────────────────────────────────────────────────────────────────────
+
+for (const commandName of BET_COMMANDS) {
+  app.command(commandName, async ({ command, ack, client }) => {
+    await ack();
+
+    await client.views.open({
+      trigger_id: command.trigger_id,
+      view: createBetModal(command.channel_id),
+    });
+  });
+}
+
+/** 모달에서 "내기 시작"을 누른 순간. 내기를 만들고 채널에 모집 메시지를 올립니다. */
+app.view(VIEW.CREATE_BET, async ({ ack, body, view, client }) => {
+  const values = view.state.values;
+  const category = field(values, FIELD.BET_CATEGORY);
+
+  if (!category) {
+    await ack({ response_action: 'errors', errors: { [FIELD.BET_CATEGORY]: '뭘 걸고 내기할지 골라주세요.' } });
+    return;
+  }
+  await ack();
+
+  const channelId = view.private_metadata; // 모달을 연 채널을 기억해뒀던 값
+  const userId = body.user.id;
+  const capacityRaw = field(values, FIELD.CAPACITY);
+
+  await rememberWhoThisIs(userId); // 대시보드에 ID 대신 이름이 보이도록
+
+  const pot = createPot({
+    channelId,
+    organizerId: userId,
+    potType: POT_TYPE.BET,
+    title: `${category} 내기`,
+    place: category,
+    meetAt: null,
+    capacity: capacityRaw ? Number(capacityRaw) : 0,
+    account: null, // 내기는 정산이 없어서 계좌가 필요 없습니다.
+  });
+
+  try {
+    const posted = await client.chat.postMessage({
+      channel: channelId,
+      text: `🎲 ${pot.title} — 참가자 모집중`,
+      blocks: potMessage(pot, getParticipants(pot.id)),
+    });
+    if (!posted.ts) throw new Error('메시지는 올렸지만 주소를 받지 못했습니다.');
+    setPotMessage(pot.id, posted.ts);
+  } catch (error) {
+    console.error('내기 모집 메시지 발송 실패:', error);
+
+    deletePot(pot.id);
+
+    await client.chat.postMessage({
+      channel: userId,
+      text:
+        `⚠️ *${pot.title}* 를 만들지 못했어요. 채널에 메시지를 올릴 수 없었습니다.\n` +
+        `해당 채널에 ${botMention()} 를 먼저 초대한 뒤 다시 시도해 주세요.\n` +
+        `(채널에서 \`/invite\` 를 입력하고 봇을 고르시면 됩니다)`,
+    });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -164,6 +164,9 @@ function PotCard({
             <span>📍 {pot.place ?? "미정"}</span>
             <span>🕐 {pot.meet_at ?? "미정"}</span>
             <span>👤 {names.get(pot.organizer_id) ?? pot.organizer_id}</span>
+            {pot.status === POT_STATUS.DRAWN && pot.winner_id && (
+              <span>🎉 당첨 {names.get(pot.winner_id) ?? pot.winner_id}</span>
+            )}
           </p>
         </div>
         <StatusBadge status={pot.status} />
@@ -225,13 +228,17 @@ function PotCard({
 function StatusTracker({ status }: { status: PotStatus }) {
   const current = statusStep(status);
 
-  // 취소된 팟 · 정산 없이 끝난 팟은 4단계 흐름 밖이라 막대 대신 한 줄로 표시합니다.
+  // 취소된 팟 · 정산 없이 끝난 팟 · 추첨이 끝난 내기는 4단계 흐름 밖이라 막대 대신 한 줄로 표시합니다.
   // (막대를 그리면 "0단계에 멈춘 팟"처럼 보여서 오해를 부릅니다)
   if (current === 0) {
+    const offFlowText =
+      status === POT_STATUS.NO_SETTLEMENT
+        ? "정산 없이 끝났어요 (각자 계산)"
+        : status === POT_STATUS.DRAWN
+          ? "추첨이 끝났어요"
+          : "진행이 중단된 팟이에요";
     return (
-      <p className="mt-5 border-t border-line pt-3.5 text-[13px] text-tertiary">
-        {status === POT_STATUS.NO_SETTLEMENT ? "정산 없이 끝났어요 (각자 계산)" : "진행이 중단된 팟이에요"}
-      </p>
+      <p className="mt-5 border-t border-line pt-3.5 text-[13px] text-tertiary">{offFlowText}</p>
     );
   }
 
@@ -274,6 +281,7 @@ function StatusBadge({ status }: { status: PotStatus }) {
     // 취소됨은 눈에 덜 띄게 회색으로 둡니다. 진행 중인 팟을 가리지 않도록요.
     CANCELLED: "bg-line/60 text-tertiary",
     NO_SETTLEMENT: "bg-cyan-500/15 text-cyan-600",
+    DRAWN: "bg-pink-500/15 text-pink-600",
   };
 
   return (

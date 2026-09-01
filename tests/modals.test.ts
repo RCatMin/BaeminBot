@@ -53,6 +53,7 @@ describe('칸 이름은 FIELD 목록 또는 참여자별 금액칸 이름이어�
   const modals = {
     '팟 만들기 (배달)': B.createPotModal('DELIVERY', 'C1', null),
     '팟 만들기 (외식)': B.createPotModal('DINE_OUT', 'C1', null),
+    '내기 만들기': B.createBetModal('C1'),
     '정산 시작': B.startSettlementModal(fakePot, fakePayers, noNames, null),
     '계좌 등록': B.saveAccountModal(null),
   };
@@ -261,5 +262,88 @@ describe('상태별 버튼', () => {
 
   test('정산 없이 종료: 누를 게 없다', () => {
     assert.deepEqual(buttonsFor(POT_STATUS.NO_SETTLEMENT), []);
+  });
+
+  test('추첨 완료: 누를 게 없다', () => {
+    assert.deepEqual(buttonsFor(POT_STATUS.DRAWN), []);
+  });
+});
+
+describe('내기 (/내기빵)', () => {
+  test('카테고리 선택지가 BET_CATEGORIES 와 같다', () => {
+    const category = inputs(B.createBetModal('C1')).find((b) => b.block_id === B.FIELD.BET_CATEGORY)!;
+
+    assert.equal(category.element.type, 'static_select');
+    assert.deepEqual(
+      (category.element.options as { value: string }[]).map((o) => o.value),
+      [...B.BET_CATEGORIES],
+    );
+  });
+
+  test('카테고리는 필수, 참가자 수는 선택', () => {
+    const byId = new Map(inputs(B.createBetModal('C1')).map((b) => [b.block_id, b]));
+    assert.notEqual(byId.get(B.FIELD.BET_CATEGORY)?.optional, true);
+    assert.equal(byId.get(B.FIELD.CAPACITY)?.optional, true);
+  });
+
+  test('시간·계좌 칸은 없다 — 내기는 정산이 필요 없다', () => {
+    const ids = inputs(B.createBetModal('C1')).map((b) => b.block_id);
+    assert.ok(!ids.includes(B.FIELD.MEET_AT));
+    for (const id of B.ACCOUNT_FIELDS) assert.ok(!ids.includes(id));
+  });
+
+  test('모집중 버튼 문구는 "마감"이 아니라 "추첨하기"', () => {
+    const pot = {
+      id: 1,
+      channel_id: 'C',
+      message_ts: null,
+      organizer_id: 'U',
+      pot_type: 'BET',
+      title: '커피 내기',
+      place: '커피',
+      meet_at: null,
+      capacity: 0,
+      status: POT_STATUS.RECRUITING,
+      bank_name: null,
+      account_number: null,
+      account_holder: null,
+      total_amount: null,
+      winner_id: null,
+      created_at: '',
+      updated_at: '',
+    } as Parameters<typeof B.potMessage>[0];
+
+    const actions = B.potMessage(pot, []).find((b) => b.type === 'actions') as
+      | { elements: { action_id: string; text: { text: string } }[] }
+      | undefined;
+    const closeButton = actions?.elements.find((e) => e.action_id === B.ACTION.CLOSE);
+
+    assert.match(closeButton!.text.text, /추첨하기/);
+  });
+
+  test('추첨이 끝나면 메시지에 당첨자가 보인다', () => {
+    const pot = {
+      id: 1,
+      channel_id: 'C',
+      message_ts: null,
+      organizer_id: 'U_LEADER',
+      pot_type: 'BET',
+      title: '커피 내기',
+      place: '커피',
+      meet_at: null,
+      capacity: 0,
+      status: POT_STATUS.DRAWN,
+      bank_name: null,
+      account_number: null,
+      account_holder: null,
+      total_amount: null,
+      winner_id: 'U_WINNER',
+      created_at: '',
+      updated_at: '',
+    } as Parameters<typeof B.potMessage>[0];
+
+    const text = JSON.stringify(B.potMessage(pot, []));
+    assert.ok(text.includes('U_WINNER'));
+    assert.ok(text.includes('당첨자'));
   });
 });

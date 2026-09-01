@@ -148,6 +148,7 @@ function migrate(database: DatabaseSync): void {
       account_number TEXT,
       account_holder TEXT,
       total_amount   INTEGER,            -- 총 결제 금액 (정산 시작할 때 입력)
+      winner_id      TEXT,               -- 내기(BET) 추첨 당첨자의 슬랙 ID. 그 외 팟은 항상 NULL
       created_at     TEXT NOT NULL,
       updated_at     TEXT NOT NULL
     );
@@ -175,6 +176,7 @@ function migrate(database: DatabaseSync): void {
   ensureColumn(database, 'participants', 'amount', 'amount INTEGER');
   ensureColumn(database, 'participants', 'disputed', 'disputed INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'pots', 'pot_type', "pot_type TEXT NOT NULL DEFAULT 'DELIVERY'");
+  ensureColumn(database, 'pots', 'winner_id', 'winner_id TEXT');
 }
 
 /** 테이블에 그 칸이 없으면 추가합니다. 옛날 DB를 새 스키마로 조용히 맞춰줍니다. */

@@ -10,6 +10,7 @@
 import {
   closePot,
   createPot,
+  drawWinner,
   finalizeSettlement,
   finishSettlement,
   finishWithoutSettlement,
@@ -146,5 +147,35 @@ joinPot(noSettlement.id, 'U_JIHOON');
 closePot(noSettlement.id, 'U_MINSU');
 finishWithoutSettlement(noSettlement.id, 'U_MINSU');
 
-console.log('✅ 샘플 팟 7건을 넣었습니다. (모집중 x2(배달·외식) / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리 / 정산 없이 종료)');
+// ── 내기: 모집중 (참가자 중 한 명을 뽑는 중) ────────────────────────────────
+const betRecruiting = createPot({
+  channelId: 'C_LUNCH',
+  organizerId: 'U_DAHYE',
+  potType: POT_TYPE.BET,
+  title: '커피 내기',
+  place: '커피',
+  meetAt: null,
+  capacity: 0,
+  account: null,
+});
+joinPot(betRecruiting.id, 'U_MINSU');
+joinPot(betRecruiting.id, 'U_JIHOON');
+
+// ── 내기: 추첨 완료 (당첨자 표시 확인용) ────────────────────────────────────
+const betDrawn = createPot({
+  channelId: 'C_LUNCH',
+  organizerId: 'U_SEOYEON',
+  potType: POT_TYPE.BET,
+  title: '디저트 내기',
+  place: '디저트',
+  meetAt: null,
+  capacity: 0,
+  account: null,
+});
+joinPot(betDrawn.id, 'U_MINSU');
+joinPot(betDrawn.id, 'U_DAHYE');
+drawWinner(betDrawn.id, 'U_SEOYEON');
+
+console.log('✅ 샘플 팟 9건을 넣었습니다.');
+console.log('   모집중 x3(배달·외식·내기) / 모집 완료 / 정산 중 / 정산 완료 / 정산 마무리 / 정산 없이 종료 / 내기 추첨 완료');
 console.log('   npm run dev 로 http://localhost:3000 에서 확인하세요.');

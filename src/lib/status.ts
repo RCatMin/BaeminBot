@@ -25,6 +25,9 @@ export const POT_STATUS = {
   // 모집 완료에서 곧장 빠져나오는 길. 각자 계산하는 식당처럼 봇 안에서 돈을 모을 필요가
   // 없을 때 씁니다. 취소와 달리 "약속은 잘 끝났다"는 뜻이라 화면에서 따로 구분합니다.
   NO_SETTLEMENT: 'NO_SETTLEMENT',
+  // 모집중에서 곧장 빠져나오는 또 다른 길. 내기(/내기빵)는 돈을 걷는 게 아니라
+  // 참가자 중 한 명을 뽑는 게 목적이라, 정산 단계 없이 바로 여기서 끝납니다.
+  DRAWN: 'DRAWN',
 } as const;
 
 // POT_STATUS의 값들만 뽑아서 만든 타입.
@@ -39,6 +42,7 @@ export const STATUS_LABEL: Record<PotStatus, string> = {
   FINALIZED: '정산 마무리',
   CANCELLED: '취소됨',
   NO_SETTLEMENT: '정산 없음',
+  DRAWN: '추첨 완료',
 };
 
 /** 상태별 이모지 (슬랙 메시지 제목에 붙습니다) */
@@ -50,6 +54,7 @@ export const STATUS_EMOJI: Record<PotStatus, string> = {
   FINALIZED: '🏁',
   CANCELLED: '🚫',
   NO_SETTLEMENT: '💳',
+  DRAWN: '🎉',
 };
 
 /**
@@ -68,15 +73,19 @@ export const STATUS_EMOJI: Record<PotStatus, string> = {
  * CLOSED → NO_SETTLEMENT 도 CANCELLED처럼 옆길입니다. 각자 계산하는 식당이라 봇으로
  * 돈을 모을 필요가 없을 때 파티장이 고릅니다. 한 번 고르면 되돌릴 수 없습니다
  * (마음이 바뀌었다면 새로 팟을 만드는 게 낫습니다 — CANCELLED와 같은 이유).
+ *
+ * RECRUITING → DRAWN 도 마찬가지로 옆길입니다. 내기는 정산이 필요 없어서 모집중에서
+ * 곧장 끝나며, 추첨 결과도 되돌리지 않습니다.
  */
 const ALLOWED_TRANSITIONS: Record<PotStatus, PotStatus[]> = {
-  RECRUITING: [POT_STATUS.CLOSED, POT_STATUS.CANCELLED],
+  RECRUITING: [POT_STATUS.CLOSED, POT_STATUS.DRAWN, POT_STATUS.CANCELLED],
   CLOSED: [POT_STATUS.SETTLING, POT_STATUS.NO_SETTLEMENT, POT_STATUS.CANCELLED],
   SETTLING: [POT_STATUS.SETTLED, POT_STATUS.CANCELLED],
   SETTLED: [POT_STATUS.FINALIZED], // 정산 완료까지는 다시 열 수 있지만, 마무리하면 그걸로 끝입니다.
   FINALIZED: [], // 마무리된 팟은 되돌릴 수 없습니다. 계좌번호도 곧 지워집니다.
   CANCELLED: [], // 취소된 팟은 되살리지 않습니다. 새로 만드는 게 낫습니다.
   NO_SETTLEMENT: [], // 정산 없이 끝난 팟도 되살리지 않습니다.
+  DRAWN: [], // 추첨이 끝난 내기도 되살리지 않습니다.
 };
 
 /** from 상태에서 to 상태로 넘어가도 되는지 확인합니다. */
