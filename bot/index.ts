@@ -1107,7 +1107,9 @@ try {
 }
 
 // 어떤 커맨드를 받는지 찍어둡니다. 슬랙에 등록한 이름이 여기 없으면 반응이 없습니다.
-console.log(`   받는 커맨드: ${[...LUNCH_COMMANDS, ...ACCOUNT_COMMANDS].join(' ')}`);
+console.log(
+  `   받는 커맨드: ${[...LUNCH_COMMANDS, ...DINE_OUT_COMMANDS, ...BET_COMMANDS, ...ACCOUNT_COMMANDS].join(' ')}`,
+);
 
 // 예전 팟의 참여자 이름까지 채워둡니다. (대시보드에서 ID 대신 이름으로 보이도록)
 await syncUserNames();
