@@ -38,6 +38,9 @@ yarn-error.log*
 # 로컬 SQLite DB — 참여자 계좌번호가 들어 있으므로 절대 커밋 금지
 /data
 
+# 사내 공유용으로 쓰고 버리는 소개 문구 초안. 저장소에 남길 내용이 아닙니다.
+/audience-tailored-intros.md
+
 # vercel
 .vercel
 
