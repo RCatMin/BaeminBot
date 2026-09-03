@@ -1,0 +1,36 @@
+# PR을 올리거나 main에 커밋하면 여기서 검사를 돌립니다.
+#
+# 혼자 하는 프로젝트라 코드 리뷰를 받을 일은 없지만, 머지하기 전에 테스트와
+# 타입 검사가 자동으로 도는 것만으로도 충분히 값어치가 있습니다.
+# (사람이 매번 npm test 를 기억해서 돌릴 필요가 없어집니다)
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # node:sqlite 와 타입스트리핑(.ts 를 그대로 실행)을 쓰기 때문에
+      # 로컬과 같은 Node 26 이 필요합니다. 낮은 버전에서는 실행 자체가 안 됩니다.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+
+      - run: npm ci
+
+      # 슬랙 토큰(.env.local)은 CI에 없지만, 아래 검사들은 토큰이 필요 없습니다.
+      # 대시보드가 읽는 DB 경로도 기본값(data/)이 있어서 그냥 돕니다.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
