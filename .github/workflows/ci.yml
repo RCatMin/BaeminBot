@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # node:sqlite 와 타입스트리핑(.ts 를 그대로 실행)을 쓰기 때문에
       # 로컬과 같은 Node 26 이 필요합니다. 낮은 버전에서는 실행 자체가 안 됩니다.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '26'
           cache: npm
