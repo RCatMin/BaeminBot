@@ -1,7 +1,16 @@
 # 🍚 밥머거
 
+<img src="docs/images/mascot.png" alt="라면을 먹는 사람 일러스트" width="140" align="right">
+
 점심 모으기부터 정산 계좌 자동 DM까지 처리하는 사내 슬랙봇입니다.
 배달(`/배달`) · 외식(`/외식`) · 내기(`/내기빵`) 세 가지 상황을 다룹니다.
+
+**처음 쓰신다면 → [📖 사용 설명서](https://rcatmin.github.io/BaeminBot/user-guide.html)**
+커맨드, 버튼별 권한, 단계별 흐름, 자주 막히는 것들이 그림과 함께 정리돼 있습니다.
+
+<br clear="right">
+
+---
 
 ## 4단계 흐름
 
@@ -80,6 +89,8 @@ npm run dev
 | `/계좌등록` | 내 계좌 저장. 다음부터 자동으로 채워짐           |
 
 나머지는 전부 메시지의 버튼으로 진행됩니다.
+버튼별 권한과 상태 표시까지 자세한 내용은 **[사용 설명서](https://rcatmin.github.io/BaeminBot/user-guide.html)** 를 보세요.
+(소스는 [`docs/user-guide.html`](docs/user-guide.html) 이고, GitHub Pages 로 띄웁니다)
 
 ## 프로젝트 구조
 
@@ -95,6 +106,8 @@ scripts/seed.ts     샘플 데이터 넣기
 scripts/doctor.ts   토큰 · 권한 · 연결 진단 (npm run doctor)
 scripts/restart-all.sh  봇과 대시보드를 한 번에 재시작 (macOS · Linux)
 tests/              규칙 테스트 (npm test)
+docs/user-guide.html  사용 설명서 (GitHub Pages 로 공개)
+docs/images/        설명서 · README 일러스트
 .github/workflows/ci.yml  PR · main 커밋 검사
 ```
 
@@ -115,6 +128,8 @@ tests/              규칙 테스트 (npm test)
 
 ## 기술 메모
 
+- 일러스트는 [いらすとや](https://www.irasutoya.com/) 의 무료 소재입니다.
+  상업·비상업 모두 무료이고, 한 저작물에 21점 이상 쓰는 상업적 이용만 유료입니다.
 - **Socket Mode** 라서 ngrok이나 배포 없이 로컬에서 바로 동작합니다.
 - Node 26 내장 기능만 씁니다 — `node:sqlite`(DB), TypeScript 직접 실행. 네이티브 빌드 없음.
 - 대시보드는 `connection()` + `<Suspense>` 로 요청마다 DB를 읽습니다.
