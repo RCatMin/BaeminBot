@@ -14,7 +14,10 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # ubuntu-latest 대신 버전을 박아둡니다. 2026-10-19 부터 ubuntu-latest 가
+    # Ubuntu 26 으로 옮겨가는데, 몇 주씩 손을 안 대는 프로젝트라 그날 CI가
+    # 조용히 깨지면 알아차리기 어렵습니다. 올릴 때는 여기를 직접 고치세요.
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v5
