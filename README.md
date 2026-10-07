@@ -1,3 +1,5 @@
+<img src="docs/images/main-image.png" alt="밥머거 메인 이미지 일러스트" align="center">
+
 # 🍚 밥머거
 
 <img src="docs/images/mascot.png" alt="라면을 먹는 사람 일러스트" width="140" align="right">
